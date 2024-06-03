@@ -1,9 +1,12 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+require('dotenv').config();
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UploadController } from './upload/upload.controller';
 import { UploadService } from './upload/upload.service';
+import { AuthModule } from './auth/auth.module';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import * as fs from 'fs';
@@ -50,6 +53,7 @@ import * as path from 'path';
         }
       },
     }),
+    AuthModule,
   ],
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],

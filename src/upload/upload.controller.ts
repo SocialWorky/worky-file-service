@@ -5,9 +5,11 @@ import {
   UseInterceptors,
   Body,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 class UploadDto {
   userId: string;
@@ -18,6 +20,7 @@ class UploadDto {
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post()
   @UseInterceptors(FilesInterceptor('files', 10))
   uploadFiles(
