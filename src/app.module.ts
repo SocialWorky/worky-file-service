@@ -17,21 +17,25 @@ import * as path from 'path';
     MulterModule.register({
       storage: diskStorage({
         destination: (req, file, callback) => {
-          const { destination } = req.body;
-          const uploadPath = path.join(
-            __dirname,
-            '..',
-            'uploads',
-            destination || 'worky_default',
-          );
+          try {
+            const { destination } = req.body;
+            const uploadPath = path.join(
+              __dirname,
+              '..',
+              'uploads',
+              destination || 'worky_default',
+            );
 
-          fs.mkdirSync(uploadPath, { recursive: true });
-          callback(null, uploadPath);
+            fs.mkdirSync(uploadPath, { recursive: true });
+            callback(null, uploadPath);
+          } catch (err) {
+            callback(new Error('Error creando directorio de destino'), null);
+          }
         },
         filename: (req, file, callback) => {
           const { userId } = req.body;
           if (!userId) {
-            return callback(new Error('userId es requerido'), null);
+            return callback(new Error('userId is required'), null);
           }
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const ext = extname(file.originalname);
@@ -39,19 +43,6 @@ import * as path from 'path';
           callback(null, filename);
         },
       }),
-      fileFilter: (req, file, callback) => {
-        const allowedMimeTypes = [
-          'image/jpeg',
-          'image/png',
-          'video/mp4',
-          'video/mpeg',
-        ];
-        if (allowedMimeTypes.includes(file.mimetype)) {
-          callback(null, true);
-        } else {
-          callback(new Error('Tipo de archivo no permitido'), false);
-        }
-      },
     }),
     AuthModule,
   ],

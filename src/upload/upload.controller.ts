@@ -10,6 +10,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FileTypeInterceptor } from './file-type.interceptor';
 
 class UploadDto {
   userId: string;
@@ -22,14 +23,14 @@ export class UploadController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
-  @UseInterceptors(FilesInterceptor('files', 10))
+  @UseInterceptors(FilesInterceptor('files', 10), FileTypeInterceptor)
   uploadFiles(
-    @UploadedFiles() files: Express.MulterFile[],
+    @UploadedFiles() files: Express.Multer.File[],
     @Body() body: UploadDto,
   ) {
     if (!files || files.length === 0) {
       throw new BadRequestException(
-        'No se han subido archivos o los archivos no son del tipo permitido.',
+        'No files have been uploaded or the files are not of the allowed type.',
       );
     }
     return this.uploadService.uploadFiles(files, body.userId);
