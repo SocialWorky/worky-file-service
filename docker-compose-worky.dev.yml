@@ -1,0 +1,18 @@
+version: "3"
+services:
+  app:
+    image: socialworky/worky-file-service-dev:${GIT_SHA}
+    restart: always
+    container_name: worky-file-service-dev
+    ports:
+      - ${APP_PORT}:${APP_PORT}
+    environment:
+      APP_PORT: ${APP_PORT}
+      JWT_SECRET: ${JWT_SECRET}
+    volumes:
+      - uploads_data:/app/uploads
+    dns:
+      - 1.1.1.1
+
+volumes:
+  uploads_data:
