@@ -40,4 +40,3 @@ jobs:
           image: socialworky/worky-file-service-dev:${{ github.sha }}
         env:
           GIT_SHA: ${{ github.sha }}
-

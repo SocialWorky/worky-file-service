@@ -1,3 +1,9 @@
+# Use the ffmpeg image as a base
+FROM jrottenberg/ffmpeg:4.4-alpine as base
+
+# Install libvips
+RUN apk add --no-cache --repository http://dl-cdn.alpinelinux.org/alpine/v3.14/main/ vips-dev
+
 # Build stage for dependencies
 FROM node:22.1.0-alpine3.18 as deps
 WORKDIR /app
@@ -18,13 +24,10 @@ COPY . .
 RUN npm run build
 
 # Final stage for production
-FROM node:22.1.0-alpine3.18 as prod
+FROM base as prod
 WORKDIR /app
 ENV APP_VERSION=${APP_VERSION}
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-
-# Install libvips and ffmpeg
-RUN apk add --no-cache libvips ffmpeg
 
 CMD ["node", "dist/main.js"]
