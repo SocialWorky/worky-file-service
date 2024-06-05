@@ -29,6 +29,13 @@
 ## Installation
 
 ```bash
+# instalar libvips, es para trabajar con la optimización de las imagenes y videos
+$ brew install libvips
+# instalar ffmpeg para procesar los videos 
+$ brew install ffmpeg
+````
+
+```bash
 $ node version 22.1.0
 ```
 

@@ -24,7 +24,7 @@ export class UploadController {
   @UseGuards(JwtAuthGuard)
   @Post()
   @UseInterceptors(FilesInterceptor('files', 10), FileTypeInterceptor)
-  uploadFiles(
+  async uploadFiles(
     @UploadedFiles() files: Express.Multer.File[],
     @Body() body: UploadDto,
   ) {
@@ -33,6 +33,12 @@ export class UploadController {
         'No files have been uploaded or the files are not of the allowed type.',
       );
     }
-    return this.uploadService.uploadFiles(files, body.userId);
+
+    try {
+      const response = await this.uploadService.uploadFiles(files, body.userId);
+      return response;
+    } catch (error) {
+      throw new BadRequestException(`Error processing files: ${error.message}`);
+    }
   }
 }

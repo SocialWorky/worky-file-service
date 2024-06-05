@@ -1,6 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-require('dotenv').config();
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -9,8 +7,10 @@ import { UploadService } from './upload/upload.service';
 import { AuthModule } from './auth/auth.module';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { ConfigModule } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as cors from 'cors';
 
 @Module({
   imports: [
@@ -45,8 +45,13 @@ import * as path from 'path';
       }),
     }),
     AuthModule,
+    ConfigModule.forRoot({ isGlobal: true }),
   ],
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(cors()).forRoutes('*');
+  }
+}

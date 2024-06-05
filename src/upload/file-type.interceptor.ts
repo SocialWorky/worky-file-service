@@ -20,8 +20,15 @@ export class FileTypeInterceptor implements NestInterceptor {
     const allowedMimeTypes = [
       'image/jpeg',
       'image/png',
+      'image/gif',
+      'image/bmp',
+      'image/tiff',
+      'image/webp',
+      'image/jpg',
       'video/mp4',
       'video/mpeg',
+      'video/quicktime',
+      'video/avi',
     ];
 
     for (const file of files) {
