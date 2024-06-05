@@ -16,3 +16,4 @@ services:
 
 volumes:
   uploads_data:
+    external: false
