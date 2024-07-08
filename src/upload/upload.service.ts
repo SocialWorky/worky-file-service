@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as sharp from 'sharp';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as path from 'path';
-
 import * as ffmpegPath from '@ffmpeg-installer/ffmpeg';
 
 ffmpeg.setFfmpegPath(ffmpegPath.path);
@@ -83,11 +82,13 @@ export class UploadService {
     try {
       // Crear una versión comprimida
       await sharp(filePath)
+        .rotate() // Respetar la orientación original
         .resize({ width: 800 }) // Cambiar el tamaño según lo necesites
         .toFile(compressedPath);
 
       // Crear una versión de menor tamaño
       await sharp(filePath)
+        .rotate() // Respetar la orientación original
         .resize({ width: 200 }) // Cambiar el tamaño según lo necesites
         .toFile(thumbnailPath);
     } catch (error) {
