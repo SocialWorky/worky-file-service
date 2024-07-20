@@ -115,7 +115,7 @@ export class UploadService {
           '-c:v libx264', // Codec de video
           '-crf 23', // Constant Rate Factor (calidad vs tamaño)
           '-preset fast', // Preset de velocidad de codificación
-          '-vf scale=min(iw\\,1280):min(ih\\,720)', // Escalar al máximo de 1280x720 manteniendo la relación de aspecto
+          '-vf "scale=-2:720"', // Escalar manteniendo la relación de aspecto
           '-pix_fmt yuv420p', // Formato de píxeles para compatibilidad amplia
         ])
         .output(optimizedPath)
