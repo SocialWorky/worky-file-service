@@ -1,0 +1,42 @@
+name: Update Container on Portainer
+
+on:
+  push:
+    branches:
+      - development
+
+jobs:
+  update-container:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        run: |
+          echo "Iniciando la construcción y el empuje de la imagen Docker multiplataforma..."
+          docker buildx create --use
+          docker buildx build --platform linux/amd64,linux/arm64 -t socialworky/worky-file-service-dev:${{ github.sha }} --push .
+          echo "Construcción y empuje de la imagen Docker multiplataforma completados."
+
+      - name: Deploy stack to Portainer
+        uses: carlrygart/portainer-stack-deploy@v1
+        with:
+          portainer-host: https://portainer-dev.worky.cl
+          username: ${{ secrets.PORTAINER_USERNAME }}
+          password: ${{ secrets.PORTAINER_PASSWORD }}
+          stack-name: 'worky-file-service'
+          stack-definition: 'docker-compose-worky.dev.yml'
+          image: socialworky/worky-file-service-dev:${{ github.sha }}
+        env:
+          GIT_SHA: ${{ github.sha }}
