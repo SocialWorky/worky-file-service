@@ -17,20 +17,22 @@ export class UploadService {
 
           const fileType = file.mimetype.split('/')[0];
 
+          const nameFile = file.filename + '|' + file.originalname;
+
           if (fileType === 'image') {
             return {
               originalname: file.originalname,
-              filename: file.filename,
-              filenameThumbnail: 'thumbnail|' + file.filename,
-              filenameCompressed: 'compressed|' + file.filename,
+              filename: nameFile,
+              filenameThumbnail: 'thumbnail|' + nameFile,
+              filenameCompressed: 'compressed|' + nameFile,
               userId: userId,
             };
           } else if (fileType === 'video') {
             return {
               originalname: file.originalname,
-              filename: 'worky|' + file.filename,
-              filenameThumbnail: 'worky|' + file.filename,
-              filenameCompressed: 'worky|' + file.filename,
+              filename: 'worky|' + nameFile,
+              filenameThumbnail: 'worky|' + nameFile,
+              filenameCompressed: 'worky|' + nameFile,
               userId: userId,
             };
           }
@@ -41,9 +43,11 @@ export class UploadService {
           // Handle or log the error appropriately
           return {
             originalname: file.originalname,
-            filename: file.filename,
-            filenameThumbnail: 'thumbnail|' + file.filename,
-            filenameCompressed: 'compressed|' + file.filename,
+            filename: file.filename + '|' + file.originalname,
+            filenameThumbnail:
+              'thumbnail|' + file.filename + '|' + file.originalname,
+            filenameCompressed:
+              'compressed|' + file.filename + '|' + file.originalname,
             error: error.message,
             userId: userId,
           };
