@@ -17,7 +17,8 @@ export class UploadService {
 
           const fileType = file.mimetype.split('/')[0];
 
-          const nameFile = file.filename + '|' + file.originalname;
+          const nameFile =
+            file.originalname.split('.')[0] + '|' + file.filename;
 
           if (fileType === 'image') {
             return {
@@ -43,11 +44,17 @@ export class UploadService {
           // Handle or log the error appropriately
           return {
             originalname: file.originalname,
-            filename: file.filename + '|' + file.originalname,
+            filename: file.originalname.split('.')[0] + '|' + file.filename,
             filenameThumbnail:
-              'thumbnail|' + file.filename + '|' + file.originalname,
+              'thumbnail|' +
+              file.originalname.split('.')[0] +
+              '|' +
+              file.filename,
             filenameCompressed:
-              'compressed|' + file.filename + '|' + file.originalname,
+              'compressed|' +
+              file.originalname.split('.')[0] +
+              '|' +
+              file.filename,
             error: error.message,
             userId: userId,
           };
