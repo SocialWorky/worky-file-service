@@ -39,7 +39,7 @@ import * as cors from 'cors';
           }
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const ext = extname(file.originalname);
-          const filename = `${userId}-${timestamp}${ext}`;
+          const filename = `${userId}-${timestamp}-${file.originalname}${ext}`;
           callback(null, filename);
         },
       }),
