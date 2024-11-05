@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { fork } from 'child_process';
 import * as path from 'path';
+import { Worker } from 'worker_threads';
 
 @Injectable()
 export class UploadService {
@@ -8,21 +8,37 @@ export class UploadService {
     const response = await Promise.all(
       files.map(async (file) => {
         try {
-          await this.optimizeFileInWorker(file);
+          await this.optimizeFile(file);
           const fileType = file.mimetype.split('/')[0];
 
-          return {
-            originalname: file.originalname,
-            filename: file.filename,
-            fileType,
-            userId,
-          };
+          if (fileType === 'image') {
+            return {
+              originalname: file.originalname,
+              filename: file.filename,
+              filenameThumbnail: 'thumbnail|' + file.filename,
+              filenameCompressed: 'compressed|' + file.filename,
+              userId: userId,
+            };
+          } else if (fileType === 'video') {
+            return {
+              originalname: file.originalname,
+              filename: 'worky|' + file.filename,
+              filenameThumbnail: 'worky|' + file.filename,
+              filenameCompressed: 'worky|' + file.filename,
+              userId: userId,
+            };
+          }
         } catch (error) {
+          console.error(
+            `Error processing file ${file.originalname}: ${error.message}`,
+          );
           return {
             originalname: file.originalname,
             filename: file.filename,
+            filenameThumbnail: 'thumbnail|' + file.filename,
+            filenameCompressed: 'compressed|' + file.filename,
             error: error.message,
-            userId,
+            userId: userId,
           };
         }
       }),
@@ -30,26 +46,36 @@ export class UploadService {
     return response;
   }
 
-  private optimizeFileInWorker(file: Express.Multer.File): Promise<void> {
+  private async optimizeFile(file: Express.Multer.File): Promise<void> {
+    const filePath = file.path;
+    const fileType = file.mimetype.split('/')[0];
+
+    if (fileType === 'image') {
+      await this.runWorker('optimizeImage', filePath);
+    } else if (fileType === 'video') {
+      await this.runWorker('optimizeVideo', filePath);
+    }
+  }
+
+  private async runWorker(task: string, filePath: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const worker = fork(path.join(__dirname, 'file-worker.js'));
+      const worker = new Worker(path.resolve(__dirname, 'file-worker.js'));
 
-      worker.send({
-        filePath: file.path,
-        fileType: file.mimetype.split('/')[0],
-      });
-      worker.on('message', (msg: { success?: boolean; error?: string }) => {
-        if (msg.success) {
-          resolve();
-        } else {
-          reject(new Error(msg.error));
-        }
+      worker.postMessage({ task, filePath });
+
+      worker.on('message', (result) => {
+        console.log(result);
+        resolve();
       });
 
-      worker.on('error', (error) => reject(error));
+      worker.on('error', (error) => {
+        console.error('Worker error:', error);
+        reject(error);
+      });
+
       worker.on('exit', (code) => {
         if (code !== 0) {
-          reject(new Error(`Worker stopped with exit code ${code}`));
+          console.error(`Worker stopped with exit code ${code}`);
         }
       });
     });
