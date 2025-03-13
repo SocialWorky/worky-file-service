@@ -9,7 +9,8 @@ RUN apk add --no-cache \
     make \
     pkgconf \
     vips-dev \
-    ffmpeg
+    ffmpeg \
+    && rm -rf /var/cache/apk/* 
 
 # Build stage for dependencies
 FROM base as deps
