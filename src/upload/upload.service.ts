@@ -3,12 +3,10 @@ import * as fs from 'fs';
 import * as sharp from 'sharp';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as path from 'path';
-//import * as ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { promisify } from 'util';
 
 const unlinkAsync = promisify(fs.unlink);
-//ffmpeg.setFfmpegPath(ffmpegPath.path);
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 @Injectable()
 export class UploadService {
@@ -144,15 +142,14 @@ export class UploadService {
           '-c:v libx264',
           '-crf 23',
           '-preset fast',
-          '-vf scale=-2:720', // 👈 Sin comillas
+          '-vf scale=-2:720',
           '-pix_fmt yuv420p',
         ])
         .output(optimizedPath)
         .on('end', async () => {
           try {
-            await unlinkAsync(filePath); // Elimina el video original
+            await unlinkAsync(filePath);
 
-            // Genera la miniatura
             await this.generateVideoThumbnail(optimizedPath);
 
             resolve({
