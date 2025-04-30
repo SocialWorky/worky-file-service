@@ -119,7 +119,10 @@ export class UploadService {
       throw error;
     }
 
-    return { compressed: compressedPath, thumbnail: thumbnailPath };
+    return {
+      compressed: `compressed|${basename}${ext}`,
+      thumbnail: `thumbnail|${basename}${ext}`,
+    };
   }
 
   /**
