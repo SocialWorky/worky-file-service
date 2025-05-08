@@ -19,12 +19,21 @@ export class UploadService {
   async uploadFiles(
     files: Express.Multer.File[],
     userId: string,
+    idReference?: string,
+    urlMedia?: string,
+    type?: string,
   ): Promise<any[]> {
     const results = [];
 
     for (const file of files) {
       try {
-        const result = await this.processFile(file, userId);
+        const result = await this.processFile(
+          file,
+          userId,
+          idReference,
+          urlMedia,
+          type,
+        );
         results.push(result);
       } catch (error) {
         console.error(`Error processing file ${file.originalname}:`, error);
@@ -33,6 +42,9 @@ export class UploadService {
           filename: file.filename,
           error: error.message,
           userId,
+          idReference,
+          urlMedia,
+          type,
         });
       }
     }
@@ -47,9 +59,12 @@ export class UploadService {
    * @returns Una promesa que resuelve con un objeto que contiene información del archivo procesado.
    * @throws Error si ocurre algún problema durante el procesamiento del archivo.
    */
-  private async processFile(
+  public async processFile(
     file: Express.Multer.File,
     userId: string,
+    idReference?: string,
+    urlMedia?: string,
+    type?: string,
   ): Promise<any> {
     try {
       const optimizedData = await this.optimizeFile(file);
@@ -58,6 +73,9 @@ export class UploadService {
         filename: file.filename,
         ...optimizedData,
         userId,
+        idReference,
+        urlMedia,
+        type,
       };
     } catch (error) {
       throw error;
@@ -159,13 +177,12 @@ export class UploadService {
               optimized: `worky|${basename}.mp4`,
               thumbnail: `thumbnail|worky|${basename}.jpg`,
             });
-          } catch (unlinkError) {
-            console.error('Error deleting original video:', unlinkError);
-            reject(unlinkError);
+          } catch (err) {
+            reject(err);
           }
         })
         .on('error', (err) => {
-          console.error('Error optimizing video:', err.message);
+          console.error(`❌ Error FFMPEG: ${err.message}`);
           reject(err);
         })
         .run();
@@ -181,28 +198,29 @@ export class UploadService {
   private async generateVideoThumbnail(filePath: string): Promise<string> {
     const directory = path.dirname(filePath);
     const ext = path.extname(filePath);
-    const basename = path.basename(filePath, ext); // <- AHORA SÍ SE USA!
+    const basename = path.basename(filePath, ext);
     const thumbnailPath = path.join(directory, `thumbnail|${basename}.jpg`);
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
-        .on('end', () => {
-          if (fs.existsSync(thumbnailPath)) {
-            resolve(thumbnailPath);
-          } else {
-            reject(new Error('Miniatura no generada.'));
-          }
-        })
-        .on('error', (err) => {
-          console.error('Error generando miniatura:', err.message);
-          reject(err);
-        })
         .screenshots({
           count: 1,
           folder: directory,
           filename: `thumbnail|${basename}.jpg`,
           size: '320x240',
           timemarks: ['00:00:01'],
+        })
+        .on('end', () => {
+          if (fs.existsSync(thumbnailPath)) {
+            resolve(thumbnailPath);
+          } else {
+            console.error(`❌ Miniatura no encontrada: ${thumbnailPath}`);
+            reject(new Error('Miniatura no generada'));
+          }
+        })
+        .on('error', (err) => {
+          console.error(`❌ Error generando miniatura: ${err.message}`);
+          reject(err);
         });
     });
   }

@@ -1,0 +1,13 @@
+version: "3"
+services:
+  redis:
+    image: redis:7
+    container_name: worky-redis
+    restart: always
+    ports:
+      - ${REDIS_PORT}:${REDIS_PORT}
+    volumes:
+      - redis_data:/data
+    dns:
+      - 1.1.1.1
+      

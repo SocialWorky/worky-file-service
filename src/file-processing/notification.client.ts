@@ -1,0 +1,183 @@
+import { Injectable } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+
+export interface MediaFileUpload {
+  filename: string;
+  thumbnail: string;
+  optimized?: string;
+  compressed?: string;
+  originalname?: string;
+}
+
+export enum TypePublishing {
+  ALL = 'all',
+  POST = 'post',
+  COMMENT = 'comment',
+  POST_PROFILE = 'postProfile',
+  IMAGE_VIEW = 'image-view',
+  MESSAGE = 'message',
+}
+
+@Injectable()
+export class NotificationClient {
+  private BASE_URL = process.env.BASE_URL;
+  private NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL;
+  private API_BACKEND_URL = process.env.API_BACKEND_URL;
+  private API_MESSAGES_SERVICE_URL = process.env.API_MESSAGES_SERVICE_URL;
+
+  constructor(private http: HttpService) {}
+
+  async sendNotification(payload: {
+    userId: string;
+    title: string;
+    body: string;
+    data: any;
+    idReference: string;
+    urlMedia: string;
+    type: TypePublishing;
+    token: string;
+  }) {
+    try {
+      const response = await this.saveFiles(
+        payload.data,
+        payload.urlMedia,
+        payload.idReference,
+        payload.type,
+        payload.token,
+      );
+
+      await this.http.axiosRef.post(
+        `${this.NOTIFICATION_SERVICE_URL}/notifications/socketSend`,
+        {
+          userId: payload.userId,
+          title: payload.title,
+          body: payload.body,
+          data: payload.data,
+          idReference: payload.idReference,
+          urlMedia: payload.urlMedia,
+          type: payload.type,
+          response,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${payload.token}`,
+          },
+        },
+      );
+    } catch (error) {
+      console.error('Error sending notification:', error.message);
+    }
+  }
+
+  async saveFiles(
+    response: MediaFileUpload,
+    saveLocation: string,
+    id: string,
+    type: TypePublishing,
+    token: string,
+  ) {
+    const file = response;
+    try {
+      const filename = this.isVideoUrl(file.filename)
+        ? file.optimized!
+        : file.filename;
+      const filenameCompressed = this.isVideoUrl(file.filename)
+        ? file.optimized!
+        : file.compressed!;
+
+      let content = '';
+
+      if (type === TypePublishing.MESSAGE) {
+        if (this.isVideoUrl(file.filename)) {
+          const videoSaved = this.BASE_URL + 'messages/' + file.optimized;
+          content = `
+                  <video width="50%" height="auto" controls>
+                    <source src="${videoSaved}" type="video/mp4">
+                    Your browser does not support the video tag.
+                  </video>
+                `;
+        } else {
+          const imagenSaved = this.BASE_URL + 'messages/' + file.filename;
+          content = `![Image](${imagenSaved})`;
+        }
+
+        await this.saveFileMessage(id, content, token);
+        return content;
+      } else {
+        await this.saveUrlFile(
+          saveLocation + filename,
+          saveLocation + file.thumbnail,
+          saveLocation + filenameCompressed,
+          id,
+          type,
+          token,
+        );
+      }
+    } catch (error) {
+      console.error(`Error saving file ${file.filename}: ${error}`);
+    }
+  }
+
+  isVideoUrl(url: string): boolean {
+    return /\.(mp4|ogg|webm|avi|mov)$/i.test(url);
+  }
+
+  async saveUrlFile(
+    url: string,
+    urlThumbnail: string,
+    urlCompressed: string,
+    _idPublications: string,
+    type: TypePublishing,
+    token: string,
+  ) {
+    const body = {
+      url: url,
+      urlThumbnail: urlThumbnail,
+      urlCompressed: urlCompressed,
+      _idPublication: _idPublications,
+      isPublications: type === TypePublishing.POST ? true : false,
+      isComment: type === TypePublishing.COMMENT ? true : false,
+    };
+
+    return await this.http.axiosRef.post<any>(
+      `${this.API_BACKEND_URL}/media/create`,
+      body,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+  }
+
+  async saveFileMessage(idMessage, content, token) {
+    try {
+      const response = await this.http.axiosRef.put<any>(
+        `${this.API_MESSAGES_SERVICE_URL}/messages/${idMessage}`,
+        {
+          content: content,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      return response.data;
+    } catch (error: any) {
+      if (error.response) {
+        console.error('Error del servidor:', error.response.status);
+        console.error('Datos del error:', error.response.data);
+        console.error('Headers:', error.response.headers);
+      } else if (error.request) {
+        console.error('No hubo respuesta del servidor:', error.request);
+      } else {
+        console.error(
+          'Error en la configuración de la solicitud:',
+          error.message,
+        );
+      }
+      throw error;
+    }
+  }
+}

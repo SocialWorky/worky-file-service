@@ -12,8 +12,33 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as cors from 'cors';
 
+import { UploadModule } from './upload/upload.module';
+import { FileProcessingModule } from './file-processing/file-processing.module';
+import { BullModule } from '@nestjs/bull';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
+import { BullAdapter } from '@bull-board/api/bullAdapter';
+
 @Module({
   imports: [
+    AuthModule,
+    BullModule.forRoot({
+      redis: {
+        host: 'localhost',
+        port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
+      },
+    }),
+    BullModule.registerQueue({
+      name: 'fileProcessing',
+    }),
+    BullBoardModule.forRoot({
+      route: '/api/queues',
+      adapter: ExpressAdapter,
+    }),
+    BullBoardModule.forFeature({
+      name: 'fileProcessing',
+      adapter: BullAdapter,
+    }),
     MulterModule.register({
       storage: diskStorage({
         destination: (req, file, callback) => {
@@ -45,8 +70,9 @@ import * as cors from 'cors';
         },
       }),
     }),
-    AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
+    UploadModule,
+    FileProcessingModule,
   ],
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],

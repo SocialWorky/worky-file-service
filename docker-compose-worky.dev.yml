@@ -7,13 +7,33 @@ services:
     ports:
       - ${APP_PORT}:${APP_PORT}
     environment:
+      BASE_URL: ${BASE_URL}
       APP_PORT: ${APP_PORT}
       JWT_SECRET: ${JWT_SECRET}
+      REDIS_PORT: ${REDIS_PORT}
+      API_BACKEND_URL: ${API_BACKEND_URL}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL}
+      API_MESSAGES_SERVICE_URL: ${API_MESSAGES_SERVICE_URL}
     volumes:
       - uploads_data:/app/uploads
+    dns:
+      - 1.1.1.1
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7
+    container_name: worky-redis
+    restart: always
+    ports:
+      - ${REDIS_PORT}:${REDIS_PORT}
+    volumes:
+      - redis_data:/data
     dns:
       - 1.1.1.1
 
 volumes:
   uploads_data:
+    external: false
+  redis_data:
     external: false
