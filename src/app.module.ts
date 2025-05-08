@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -10,7 +10,6 @@ import { extname } from 'path';
 import { ConfigModule } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as cors from 'cors';
 
 import { UploadModule } from './upload/upload.module';
 import { FileProcessingModule } from './file-processing/file-processing.module';
@@ -77,8 +76,4 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(cors()).forRoutes('*');
-  }
-}
+export class AppModule {}
