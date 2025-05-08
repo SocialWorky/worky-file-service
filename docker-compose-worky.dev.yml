@@ -14,6 +14,7 @@ services:
       API_BACKEND_URL: ${API_BACKEND_URL}
       NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL}
       API_MESSAGES_SERVICE_URL: ${API_MESSAGES_SERVICE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
     volumes:
       - uploads_data:/app/uploads
     dns:
