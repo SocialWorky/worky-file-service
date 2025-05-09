@@ -18,6 +18,14 @@ export enum TypePublishing {
   MESSAGE = 'message',
 }
 
+export enum MessageType {
+  TEXT = 'text',
+  IMAGE = 'image',
+  VIDEO = 'video',
+  AUDIO = 'audio',
+  FILE = 'file',
+}
+
 @Injectable()
 export class NotificationClient {
   private BASE_URL = process.env.BASE_URL;
@@ -86,23 +94,24 @@ export class NotificationClient {
         : file.compressed!;
 
       let content = '';
+      let typeFile: MessageType;
 
       if (type === TypePublishing.MESSAGE) {
+        let urlFile = '';
+        typeFile = MessageType.IMAGE;
         if (this.isVideoUrl(file.filename)) {
-          const videoSaved = this.BASE_URL + 'messages/' + file.optimized;
-          content = `
-                  <video width="50%" height="auto" controls>
-                    <source src="${videoSaved}" type="video/mp4">
-                    Your browser does not support the video tag.
-                  </video>
-                `;
+          typeFile = MessageType.VIDEO;
+          const videoSaved = this.BASE_URL + 'messages/' + file.thumbnail;
+          urlFile = this.BASE_URL + 'messages/' + file.optimized;
+          content = `![Image](${videoSaved})`;
         } else {
           const imagenSaved = this.BASE_URL + 'messages/' + file.filename;
+          urlFile = this.BASE_URL + 'messages/' + file.filename;
           content = `![Image](${imagenSaved})`;
         }
 
-        await this.saveFileMessage(id, content, token);
-        return content;
+        await this.saveFileMessage(id, content, typeFile, urlFile, token);
+        return { content, typeFile, urlFile };
       } else {
         await this.saveUrlFile(
           saveLocation + filename,
@@ -150,12 +159,14 @@ export class NotificationClient {
     );
   }
 
-  async saveFileMessage(idMessage, content, token) {
+  async saveFileMessage(idMessage, content, type, urlFile, token) {
     try {
       const response = await this.http.axiosRef.put<any>(
         `${this.API_MESSAGES_SERVICE_URL}/messages/${idMessage}`,
         {
           content: content,
+          type: type,
+          urlFile: urlFile,
         },
         {
           headers: {
