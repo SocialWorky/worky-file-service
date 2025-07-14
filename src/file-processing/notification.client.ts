@@ -16,6 +16,7 @@ export enum TypePublishing {
   POST_PROFILE = 'postProfile',
   IMAGE_VIEW = 'image-view',
   MESSAGE = 'message',
+  EMOJI = 'emoji',
 }
 
 export enum MessageType {
@@ -139,6 +140,7 @@ export class NotificationClient {
     type: TypePublishing,
     token: string,
   ) {
+    if (type === TypePublishing.EMOJI) return;
     const body = {
       url: url,
       urlThumbnail: urlThumbnail,
