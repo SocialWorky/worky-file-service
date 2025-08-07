@@ -34,7 +34,6 @@ RUN npm run build
 # Final stage for production
 FROM base as prod
 WORKDIR /app
-ENV APP_VERSION=${APP_VERSION}
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 

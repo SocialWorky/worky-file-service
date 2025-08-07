@@ -3,60 +3,95 @@ import * as fs from 'fs';
 import * as sharp from 'sharp';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as path from 'path';
-import * as ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { promisify } from 'util';
 
-ffmpeg.setFfmpegPath(ffmpegPath.path);
-
+const unlinkAsync = promisify(fs.unlink);
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 @Injectable()
 export class UploadService {
-  async uploadFiles(files: Express.Multer.File[], userId: string) {
-    const response = await Promise.all(
-      files.map(async (file) => {
-        try {
-          await this.optimizeFile(file);
+  /**
+   * Processes the upload of multiple files.
+   * @param files The files to upload.
+   * @param userId The ID of the user uploading the files.
+   * @returns A promise that resolves with an array of file processing results.
+   */
+  async uploadFiles(
+    files: Express.Multer.File[],
+    userId: string,
+    idReference?: string,
+    urlMedia?: string,
+    type?: string,
+  ): Promise<any[]> {
+    const results = [];
 
-          const fileType = file.mimetype.split('/')[0];
+    for (const file of files) {
+      try {
+        const result = await this.processFile(
+          file,
+          userId,
+          idReference,
+          urlMedia,
+          type,
+        );
+        results.push(result);
+      } catch (error) {
+        results.push({
+          originalname: file.originalname,
+          filename: file.filename,
+          error: error.message,
+          userId,
+          idReference,
+          urlMedia,
+          type,
+        });
+      }
+    }
 
-          if (fileType === 'image') {
-            return {
-              originalname: file.originalname,
-              filename: file.filename,
-              filenameThumbnail: 'thumbnail|' + file.filename,
-              filenameCompressed: 'compressed|' + file.filename,
-              userId: userId,
-            };
-          } else if (fileType === 'video') {
-            return {
-              originalname: file.originalname,
-              filename: 'worky|' + file.filename,
-              filenameThumbnail: 'worky|' + file.filename,
-              filenameCompressed: 'worky|' + file.filename,
-              userId: userId,
-            };
-          }
-        } catch (error) {
-          console.error(
-            `Error processing file ${file.originalname}: ${error.message}`,
-          );
-          // Handle or log the error appropriately
-          return {
-            originalname: file.originalname,
-            filename: file.filename,
-            filenameThumbnail: 'thumbnail|' + file.filename,
-            filenameCompressed: 'compressed|' + file.filename,
-            error: error.message,
-            userId: userId,
-          };
-        }
-      }),
-    );
-    return response;
+    return results;
   }
 
+  /**
+   * Processes a single file, optimizing it according to its type.
+   * @param file The file to process.
+   * @param userId The ID of the user uploading the file.
+   * @returns A promise that resolves with an object containing processed file information.
+   * @throws Error if any problem occurs during file processing.
+   */
+  public async processFile(
+    file: Express.Multer.File,
+    userId: string,
+    idReference?: string,
+    urlMedia?: string,
+    type?: string,
+  ): Promise<any> {
+    try {
+      const optimizedData = await this.optimizeFile(file);
+      return {
+        originalname: file.originalname,
+        filename: file.filename,
+        ...optimizedData,
+        userId,
+        idReference,
+        urlMedia,
+        type,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Optimizes a file according to its type (image or video).
+   * @param file The file to optimize.
+   * @returns A promise that resolves with an object containing optimized file information.
+   * @throws Error if the file type is not supported.
+   */
   private async optimizeFile(
     file: Express.Multer.File,
   ): Promise<
-    { compressed: string; thumbnail: string } | { optimized: string }
+    | { thumbnail: string; compressed: string }
+    | { optimized: string; thumbnail?: string }
   > {
     const filePath = file.path;
     const fileType = file.mimetype.split('/')[0];
@@ -66,12 +101,19 @@ export class UploadService {
     } else if (fileType === 'video') {
       return this.optimizeVideo(filePath);
     }
-    return null;
+
+    throw new Error(`Unsupported file type: ${fileType}`);
   }
 
+  /**
+   * Optimizes an image, creating a compressed version and a thumbnail.
+   * @param filePath The path of the image file.
+   * @returns A promise that resolves with an object containing the paths of the compressed image and thumbnail.
+   * @throws Error if any problem occurs during image optimization.
+   */
   private async optimizeImage(
     filePath: string,
-  ): Promise<{ compressed: string; thumbnail: string }> {
+  ): Promise<{ thumbnail: string; compressed: string }> {
     const directory = path.dirname(filePath);
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
@@ -80,55 +122,101 @@ export class UploadService {
     const thumbnailPath = path.join(directory, `thumbnail|${basename}${ext}`);
 
     try {
-      // Crear una versión comprimida
       await sharp(filePath)
-        .rotate() // Respetar la orientación original
-        .resize({ width: 800 }) // Cambiar el tamaño según lo necesites
+        .rotate()
+        .resize({ width: 800 })
         .toFile(compressedPath);
 
-      // Crear una versión de menor tamaño
       await sharp(filePath)
-        .rotate() // Respetar la orientación original
-        .resize({ width: 200 }) // Cambiar el tamaño según lo necesites
+        .rotate()
+        .resize({ width: 200 })
         .toFile(thumbnailPath);
     } catch (error) {
-      console.error(`Error optimizing image ${filePath}: ${error.message}`);
       throw error;
     }
 
     return {
-      compressed: compressedPath,
-      thumbnail: thumbnailPath,
+      compressed: `compressed|${basename}${ext}`,
+      thumbnail: `thumbnail|${basename}${ext}`,
     };
   }
 
-  private optimizeVideo(filePath: string): Promise<{ optimized: string }> {
+  /**
+   * Optimizes a video, creating a smaller optimized version and a thumbnail.
+   * @param filePath The path of the video file.
+   * @returns A promise that resolves with an object containing the path of the optimized video and thumbnail.
+   * @throws Error if any problem occurs during video optimization.
+   */
+  private async optimizeVideo(
+    filePath: string,
+  ): Promise<{ optimized: string; thumbnail: string }> {
     const directory = path.dirname(filePath);
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
-
     const optimizedPath = path.join(directory, `worky|${basename}.mp4`);
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
         .outputOptions([
-          '-c:v libx264', // Codec de video
-          '-crf 23', // Constant Rate Factor (calidad vs tamaño)
-          '-preset fast', // Preset de velocidad de codificación
-          '-vf "scale=-2:720"', // Escalar manteniendo la relación de aspecto
-          '-pix_fmt yuv420p', // Formato de píxeles para compatibilidad amplia
+          '-c:v libx264',
+          '-crf 23',
+          '-preset fast',
+          '-vf scale=-2:720',
+          '-pix_fmt yuv420p',
         ])
         .output(optimizedPath)
-        .on('end', () => {
-          fs.unlinkSync(filePath);
+        .on('end', async () => {
+          try {
+            await unlinkAsync(filePath);
 
-          resolve({ optimized: optimizedPath });
+            await this.generateVideoThumbnail(optimizedPath);
+
+            resolve({
+              optimized: `worky|${basename}.mp4`,
+              thumbnail: `thumbnail|worky|${basename}.jpg`,
+            });
+          } catch (err) {
+            reject(err);
+          }
         })
         .on('error', (err) => {
-          console.error('Error optimizing video:', err);
           reject(err);
         })
         .run();
+    });
+  }
+
+  /**
+   * Extracts a frame from the video to use as a thumbnail.
+   * @param filePath Path of the video file.
+   * @returns A promise that resolves with the path of the thumbnail.
+   * @throws Error if a problem occurs during extraction.
+   */
+  private async generateVideoThumbnail(filePath: string): Promise<string> {
+    const directory = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const basename = path.basename(filePath, ext);
+    const thumbnailPath = path.join(directory, `thumbnail|${basename}.jpg`);
+
+    return new Promise((resolve, reject) => {
+      ffmpeg(filePath)
+        .screenshots({
+          count: 1,
+          folder: directory,
+          filename: `thumbnail|${basename}.jpg`,
+          size: '320x240',
+          timemarks: ['00:00:01'],
+        })
+        .on('end', () => {
+          if (fs.existsSync(thumbnailPath)) {
+            resolve(thumbnailPath);
+          } else {
+            reject(new Error('Thumbnail not generated'));
+          }
+        })
+        .on('error', (err) => {
+          reject(err);
+        });
     });
   }
 }

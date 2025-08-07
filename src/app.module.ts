@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -10,10 +10,34 @@ import { extname } from 'path';
 import { ConfigModule } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as cors from 'cors';
+
+import { UploadModule } from './upload/upload.module';
+import { FileProcessingModule } from './file-processing/file-processing.module';
+import { BullModule } from '@nestjs/bull';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
+import { BullAdapter } from '@bull-board/api/bullAdapter';
 
 @Module({
   imports: [
+    AuthModule,
+    BullModule.forRoot({
+      redis: {
+        host: process.env.REDIS_HOST,
+        port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
+      },
+    }),
+    BullModule.registerQueue({
+      name: 'fileProcessing',
+    }),
+    BullBoardModule.forRoot({
+      route: '/api/queues',
+      adapter: ExpressAdapter,
+    }),
+    BullBoardModule.forFeature({
+      name: 'fileProcessing',
+      adapter: BullAdapter,
+    }),
     MulterModule.register({
       storage: diskStorage({
         destination: (req, file, callback) => {
@@ -39,20 +63,18 @@ import * as cors from 'cors';
           }
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const ext = extname(file.originalname);
-          const cleanedOriginalName = file.originalname.replace(/\s+/g, '');
-          const filename = `${userId}-${timestamp}-${cleanedOriginalName}${ext}`;
+          const basename = path.basename(file.originalname, ext);
+          const cleanedBasename = basename.replace(/\s+/g, '');
+          const filename = `${userId}-${timestamp}-${cleanedBasename}${ext}`;
           callback(null, filename);
         },
       }),
     }),
-    AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
+    UploadModule,
+    FileProcessingModule,
   ],
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(cors()).forRoutes('*');
-  }
-}
+export class AppModule {}

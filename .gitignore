@@ -4,6 +4,9 @@
 /build
 /uploads
 
+# Development documentation
+.dev
+
 # Logs
 logs
 *.log
