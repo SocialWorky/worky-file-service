@@ -16,10 +16,19 @@ export class FileProcessingConsumer {
 
     try {
       const result = await this.uploadService.processFile(file, userId);
+      
+      // If type is profileImg, return the result directly
+      if (type === 'profileImg') {
+        // Use moveToCompleted so the controller can get the result
+        await job.moveToCompleted(result, undefined, true);
+        return result;
+      }
+      
+      // For other types, send notification as before
       await this.notificationClient.sendNotification({
         userId,
-        title: 'Archivo procesado',
-        body: `Tu archivo ${result.originalname} está listo.`,
+        title: 'File processed',
+        body: `Your file ${result.originalname} is ready.`,
         data: result,
         idReference,
         urlMedia,
@@ -27,10 +36,7 @@ export class FileProcessingConsumer {
         token,
       });
     } catch (error) {
-      console.error(
-        `[JOB ERROR] Error procesando archivo: ${file.originalname}`,
-      );
-      console.error(error.message);
+      throw error; // Re-throw the error so the controller can catch it
     }
   }
 }

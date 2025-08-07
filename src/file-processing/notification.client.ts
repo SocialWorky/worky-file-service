@@ -17,6 +17,7 @@ export enum TypePublishing {
   IMAGE_VIEW = 'image-view',
   MESSAGE = 'message',
   EMOJI = 'emoji',
+  PROFILE_IMG = 'profileImg',
 }
 
 export enum MessageType {
@@ -74,7 +75,9 @@ export class NotificationClient {
         },
       );
     } catch (error) {
-      console.error('Error sending notification:', error.message);
+      // Re-throw the error to allow the caller to handle it.
+      // Notification errors should be handled by the caller.
+      throw error;
     }
   }
 
@@ -124,7 +127,9 @@ export class NotificationClient {
         );
       }
     } catch (error) {
-      console.error(`Error saving file ${file.filename}: ${error}`);
+      // Re-throw the error to allow the caller to handle it.
+      // Swallowing this error can lead to data inconsistencies.
+      throw error;
     }
   }
 
@@ -178,18 +183,7 @@ export class NotificationClient {
       );
       return response.data;
     } catch (error: any) {
-      if (error.response) {
-        console.error('Error del servidor:', error.response.status);
-        console.error('Datos del error:', error.response.data);
-        console.error('Headers:', error.response.headers);
-      } else if (error.request) {
-        console.error('No hubo respuesta del servidor:', error.request);
-      } else {
-        console.error(
-          'Error en la configuración de la solicitud:',
-          error.message,
-        );
-      }
+      // Re-throw the error for proper error handling
       throw error;
     }
   }

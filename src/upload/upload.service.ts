@@ -11,10 +11,10 @@ ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 @Injectable()
 export class UploadService {
   /**
-   * Procesa la subida de múltiples archivos.
-   * @param files Los archivos a subir.
-   * @param userId El ID del usuario que sube los archivos.
-   * @returns Una promesa que resuelve con un array de resultados de procesamiento de archivos.
+   * Processes the upload of multiple files.
+   * @param files The files to upload.
+   * @param userId The ID of the user uploading the files.
+   * @returns A promise that resolves with an array of file processing results.
    */
   async uploadFiles(
     files: Express.Multer.File[],
@@ -36,7 +36,6 @@ export class UploadService {
         );
         results.push(result);
       } catch (error) {
-        console.error(`Error processing file ${file.originalname}:`, error);
         results.push({
           originalname: file.originalname,
           filename: file.filename,
@@ -53,11 +52,11 @@ export class UploadService {
   }
 
   /**
-   * Procesa un solo archivo, optimizándolo según su tipo.
-   * @param file El archivo a procesar.
-   * @param userId El ID del usuario que sube el archivo.
-   * @returns Una promesa que resuelve con un objeto que contiene información del archivo procesado.
-   * @throws Error si ocurre algún problema durante el procesamiento del archivo.
+   * Processes a single file, optimizing it according to its type.
+   * @param file The file to process.
+   * @param userId The ID of the user uploading the file.
+   * @returns A promise that resolves with an object containing processed file information.
+   * @throws Error if any problem occurs during file processing.
    */
   public async processFile(
     file: Express.Multer.File,
@@ -83,10 +82,10 @@ export class UploadService {
   }
 
   /**
-   * Optimiza un archivo según su tipo (imagen o video).
-   * @param file El archivo a optimizar.
-   * @returns Una promesa que resuelve con un objeto que contiene información del archivo optimizado.
-   * @throws Error si el tipo de archivo no es soportado.
+   * Optimizes a file according to its type (image or video).
+   * @param file The file to optimize.
+   * @returns A promise that resolves with an object containing optimized file information.
+   * @throws Error if the file type is not supported.
    */
   private async optimizeFile(
     file: Express.Multer.File,
@@ -107,10 +106,10 @@ export class UploadService {
   }
 
   /**
-   * Optimiza una imagen, creando una versión comprimida y una miniatura.
-   * @param filePath La ruta del archivo de imagen.
-   * @returns Una promesa que resuelve con un objeto que contiene las rutas de la imagen comprimida y la miniatura.
-   * @throws Error si ocurre algún problema durante la optimización de la imagen.
+   * Optimizes an image, creating a compressed version and a thumbnail.
+   * @param filePath The path of the image file.
+   * @returns A promise that resolves with an object containing the paths of the compressed image and thumbnail.
+   * @throws Error if any problem occurs during image optimization.
    */
   private async optimizeImage(
     filePath: string,
@@ -133,7 +132,6 @@ export class UploadService {
         .resize({ width: 200 })
         .toFile(thumbnailPath);
     } catch (error) {
-      console.error(`Error optimizing image ${filePath}: ${error.message}`);
       throw error;
     }
 
@@ -144,10 +142,10 @@ export class UploadService {
   }
 
   /**
-   * Optimiza un video, creando una versión optimizada más pequeña y una miniatura.
-   * @param filePath La ruta del archivo de video.
-   * @returns Una promesa que resuelve con un objeto que contiene la ruta del video optimizado y la miniatura.
-   * @throws Error si ocurre algún problema durante la optimización del video.
+   * Optimizes a video, creating a smaller optimized version and a thumbnail.
+   * @param filePath The path of the video file.
+   * @returns A promise that resolves with an object containing the path of the optimized video and thumbnail.
+   * @throws Error if any problem occurs during video optimization.
    */
   private async optimizeVideo(
     filePath: string,
@@ -182,7 +180,6 @@ export class UploadService {
           }
         })
         .on('error', (err) => {
-          console.error(`❌ Error FFMPEG: ${err.message}`);
           reject(err);
         })
         .run();
@@ -190,10 +187,10 @@ export class UploadService {
   }
 
   /**
-   * Extrae un fotograma del video para usarlo como miniatura.
-   * @param filePath Ruta del archivo de video.
-   * @returns Una promesa que resuelve con la ruta de la miniatura.
-   * @throws Error si ocurre un problema durante la extracción.
+   * Extracts a frame from the video to use as a thumbnail.
+   * @param filePath Path of the video file.
+   * @returns A promise that resolves with the path of the thumbnail.
+   * @throws Error if a problem occurs during extraction.
    */
   private async generateVideoThumbnail(filePath: string): Promise<string> {
     const directory = path.dirname(filePath);
@@ -214,12 +211,10 @@ export class UploadService {
           if (fs.existsSync(thumbnailPath)) {
             resolve(thumbnailPath);
           } else {
-            console.error(`❌ Miniatura no encontrada: ${thumbnailPath}`);
-            reject(new Error('Miniatura no generada'));
+            reject(new Error('Thumbnail not generated'));
           }
         })
         .on('error', (err) => {
-          console.error(`❌ Error generando miniatura: ${err.message}`);
           reject(err);
         });
     });

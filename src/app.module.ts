@@ -63,8 +63,9 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
           }
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const ext = extname(file.originalname);
-          const cleanedOriginalName = file.originalname.replace(/\s+/g, '');
-          const filename = `${userId}-${timestamp}-${cleanedOriginalName}${ext}`;
+          const basename = path.basename(file.originalname, ext);
+          const cleanedBasename = basename.replace(/\s+/g, '');
+          const filename = `${userId}-${timestamp}-${cleanedBasename}${ext}`;
           callback(null, filename);
         },
       }),
