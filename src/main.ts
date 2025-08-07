@@ -6,13 +6,24 @@ async function bootstrap() {
   const logger = new Logger('Main');
   const app = await NestFactory.create(AppModule);
 
-  const corsOrigins = process.env.CORS_ORIGINS.split(',');
+  // More robust CORS configuration
+  const corsOrigins = process.env.CORS_ORIGINS 
+    ? process.env.CORS_ORIGINS.split(',') 
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080'];
 
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || corsOrigins.includes(origin)) {
+      // Allow requests without origin (like Postman, curl, etc.)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      
+      // Check if the origin is in the allowed list
+      if (corsOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        logger.warn(`CORS blocked for origin: ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -23,7 +34,7 @@ async function bootstrap() {
   await app.listen(parseInt(process.env.APP_PORT) || 3000);
   logger.log(`Application is running on port: ${process.env.APP_PORT}`);
   logger.log(
-    `Bull Board está disponible en: ${process.env.BASE_URL}api/queues`,
+    `Bull Board is available at: ${process.env.BASE_URL}api/queues`,
   );
 }
 bootstrap();
