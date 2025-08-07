@@ -71,14 +71,7 @@ export class UploadController {
           });
           
           // Wait for the job to finish and get the result
-          const result = await new Promise<any>((resolve, reject) => {
-            job.finished().then((jobResult) => {
-              // The result comes directly from job.finished()
-              resolve(jobResult);
-            }).catch((error) => {
-              reject(error);
-            });
-          });
+          const result = await job.finished();
           
           // Verify that the result exists
           if (!result) {

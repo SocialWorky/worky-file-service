@@ -75,7 +75,9 @@ export class NotificationClient {
         },
       );
     } catch (error) {
-      // Silent fail for notification errors
+      // Re-throw the error to allow the caller to handle it.
+      // Notification errors should be handled by the caller.
+      throw error;
     }
   }
 
@@ -125,7 +127,9 @@ export class NotificationClient {
         );
       }
     } catch (error) {
-      // Silent fail for file saving errors
+      // Re-throw the error to allow the caller to handle it.
+      // Swallowing this error can lead to data inconsistencies.
+      throw error;
     }
   }
 
