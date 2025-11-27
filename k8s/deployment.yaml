@@ -9,7 +9,7 @@ spec:
   storageClassName: longhorn
   resources:
     requests:
-      storage: 30Gi # Ajusta el tamaño según necesites
+      storage: 10Gi # Ajusta el tamaño según necesites
 ---
 apiVersion: apps/v1
 kind: Deployment
