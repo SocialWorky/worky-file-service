@@ -39,7 +39,7 @@ spec:
           value: "development"
         envFrom:
         - secretRef:
-            name: backend-social-network-backend-env-vars
+            name: social-network-file-service-env-vars
         
         # Montaje del disco para guardar archivos
         volumeMounts:
