@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: files-pvc
+  namespace: social-network-file-service # O 'social-network' si prefieres agrupar
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 30Gi # Ajusta el tamaño según necesites
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-service
+  namespace: social-network-file-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: file-service
+  template:
+    metadata:
+      labels:
+        app: file-service
+    spec:
+      containers:
+      - name: file-service
+        # Esta línea la actualizará el bot automáticamente:
+        image: socialworky/worky-file-service-dev:latest 
+        ports:
+        - containerPort: 3000 # ⚠️ AJUSTA ESTO AL PUERTO REAL DE TU APP (Node/Python/etc)
+        
+        # Variables de entorno (si las necesitas)
+        env:
+        - name: NODE_ENV
+          value: "development"
+        # Si tienes secretos, usa envFrom como en el backend anterior
+        
+        # Montaje del disco para guardar archivos
+        volumeMounts:
+        - name: file-storage
+          mountPath: /app/uploads # ⚠️ AJUSTA ESTA RUTA A DONDE TU APP GUARDA LOS ARCHIVOS
+      
+      volumes:
+      - name: file-storage
+        persistentVolumeClaim:
+          claimName: files-pvc
