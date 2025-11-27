@@ -9,5 +9,5 @@ spec:
   ports:
     - protocol: TCP
       port: 80           # Puerto interno del cluster
-      targetPort: 3000   # Puerto real de tu contenedor
+      targetPort: 3005   # Puerto real de tu contenedor
   type: ClusterIP

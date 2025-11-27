@@ -31,7 +31,7 @@ spec:
         # Esta línea la actualizará el bot automáticamente:
         image: socialworky/worky-file-service-dev:604d3a662a0eab1d0a021ab765f14a627a74c9fe
         ports:
-        - containerPort: 3000 # ⚠️ AJUSTA ESTO AL PUERTO REAL DE TU APP (Node/Python/etc)
+        - containerPort: 3005
         
         # Variables de entorno (si las necesitas)
         env:
