@@ -37,7 +37,9 @@ spec:
         env:
         - name: NODE_ENV
           value: "development"
-        # Si tienes secretos, usa envFrom como en el backend anterior
+        envFrom:
+        - secretRef:
+            name: backend-social-network-backend-env-vars
         
         # Montaje del disco para guardar archivos
         volumeMounts:
