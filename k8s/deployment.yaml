@@ -43,9 +43,6 @@ spec:
           value: "social-network-redis-service"
         - name: REDIS_PORT
           value: "6379"
-          
-        - name: API_BACKEND_URL
-          value: "http://backend-service"
 
         envFrom:
         - secretRef:
