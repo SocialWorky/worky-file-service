@@ -28,13 +28,26 @@ spec:
     spec:
       containers:
       - name: file-service
-        image: socialworky/worky-file-service-dev:604d3a662a0eab1d0a021ab765f14a627a74c9fe
+        image: socialworky/worky-file-service-dev:latest
         ports:
         - containerPort: 3005
         
         env:
         - name: NODE_ENV
           value: "development"
+        
+        - name: APP_PORT
+          value: "3005"
+        
+        - name: REDIS_HOST
+          value: "social-network-redis-service"
+        - name: REDIS_PORT
+          value: "6379"
+          
+        - name: API_BACKEND_URL
+          value: "http://backend-service"
+        # ---------------------------------------------
+
         envFrom:
         - secretRef:
             name: file-service-env-vars
