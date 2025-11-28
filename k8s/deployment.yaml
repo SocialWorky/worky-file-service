@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: file-service
-        image: socialworky/worky-file-service-dev:latest
+        image: socialworky/worky-file-service-dev:604d3a662a0eab1d0a021ab765f14a627a74c9fe
         ports:
         - containerPort: 3005
         
@@ -46,7 +46,6 @@ spec:
           
         - name: API_BACKEND_URL
           value: "http://backend-service"
-        # ---------------------------------------------
 
         envFrom:
         - secretRef:
