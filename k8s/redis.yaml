@@ -1,23 +1,21 @@
-# --- 1. DISCO DURO PARA REDIS ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: redis-data-pvc
-  namespace: social-network-file-service
+  namespace: social-network-dev
 spec:
   accessModes:
     - ReadWriteOnce
   storageClassName: longhorn
   resources:
     requests:
-      storage: 1Gi # Redis no suele necesitar mucho espacio
+      storage: 1Gi
 ---
-# --- 2. EL MOTOR REDIS ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: worky-redis
-  namespace: social-network-file-service
+  namespace: social-network-dev
 spec:
   replicas: 1
   selector:
@@ -41,12 +39,11 @@ spec:
         persistentVolumeClaim:
           claimName: redis-data-pvc
 ---
-# --- 3. SERVICIO INTERNO (El "Host") ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: social-network-redis-service # <--- ¡ESTE SERÁ TU "REDIS_HOST"!
-  namespace: social-network-file-service
+  name: social-network-redis-service
+  namespace: social-network-dev
 spec:
   selector:
     app: worky-redis

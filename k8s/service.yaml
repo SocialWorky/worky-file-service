@@ -2,12 +2,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: file-service-svc
-  namespace: social-network-file-service
+  namespace: social-network-dev
 spec:
   selector:
     app: file-service
   ports:
     - protocol: TCP
-      port: 80           # Puerto interno del cluster
-      targetPort: 3005   # Puerto real de tu contenedor
+      port: 80
+      targetPort: 3005
   type: ClusterIP
