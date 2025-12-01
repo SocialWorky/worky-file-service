@@ -32,17 +32,17 @@ spec:
         ports:
         - containerPort: 3005
         
-        env:
-        - name: NODE_ENV
-          value: "development"
+        # env:
+        # - name: NODE_ENV
+        #   value: "development"
         
-        - name: APP_PORT
-          value: "3005"
+        # - name: APP_PORT
+        #   value: "3005"
         
-        - name: REDIS_HOST
-          value: "social-network-redis-service"
-        - name: REDIS_PORT
-          value: "6379"
+        # - name: REDIS_HOST
+        #   value: "social-network-redis-service"
+        # - name: REDIS_PORT
+        #   value: "6379"
 
         envFrom:
         - secretRef:
