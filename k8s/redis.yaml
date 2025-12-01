@@ -38,6 +38,10 @@ spec:
       - name: redis-storage
         persistentVolumeClaim:
           claimName: redis-data-pvc
+
+      envFrom:
+      - secretRef:
+          name: file-service-env-vars
 ---
 apiVersion: v1
 kind: Service
