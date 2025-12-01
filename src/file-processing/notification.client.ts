@@ -48,7 +48,8 @@ export class NotificationClient {
     token: string;
   }) {
     try {
-      const response = await this.saveFiles(
+      // First, save the files and wait for successful confirmation
+      const saveResponse = await this.saveFiles(
         payload.data,
         payload.urlMedia,
         payload.idReference,
@@ -56,6 +57,13 @@ export class NotificationClient {
         payload.token,
       );
 
+      // Verify that the save operation was successful
+      // Only send notification if save was successful
+      if (!saveResponse && payload.type !== TypePublishing.EMOJI) {
+        throw new Error('Failed to save file data to database');
+      }
+
+      // Only send socket notification after successful save
       await this.http.axiosRef.post(
         `${this.NOTIFICATION_SERVICE_URL}/notifications/socketSend`,
         {
@@ -66,7 +74,7 @@ export class NotificationClient {
           idReference: payload.idReference,
           urlMedia: payload.urlMedia,
           type: payload.type,
-          response,
+          response: saveResponse,
         },
         {
           headers: {
@@ -114,10 +122,14 @@ export class NotificationClient {
           content = `![Image](${imagenSaved})`;
         }
 
-        await this.saveFileMessage(id, content, typeFile, urlFile, token);
-        return { content, typeFile, urlFile };
+        const messageResponse = await this.saveFileMessage(id, content, typeFile, urlFile, token);
+        // Verify the message was saved successfully
+        if (!messageResponse) {
+          throw new Error('Failed to save message file');
+        }
+        return { content, typeFile, urlFile, messageResponse };
       } else {
-        await this.saveUrlFile(
+        const mediaResponse = await this.saveUrlFile(
           saveLocation + filename,
           saveLocation + file.thumbnail,
           saveLocation + filenameCompressed,
@@ -125,6 +137,8 @@ export class NotificationClient {
           type,
           token,
         );
+        // Return the response to verify it was saved successfully
+        return mediaResponse;
       }
     } catch (error) {
       // Re-throw the error to allow the caller to handle it.
@@ -145,7 +159,7 @@ export class NotificationClient {
     type: TypePublishing,
     token: string,
   ) {
-    if (type === TypePublishing.EMOJI) return;
+    if (type === TypePublishing.EMOJI) return null;
     const body = {
       url: url,
       urlThumbnail: urlThumbnail,
@@ -155,7 +169,7 @@ export class NotificationClient {
       isComment: type === TypePublishing.COMMENT ? true : false,
     };
 
-    return await this.http.axiosRef.post<any>(
+    const response = await this.http.axiosRef.post<any>(
       `${this.API_BACKEND_URL}/media/create`,
       body,
       {
@@ -164,6 +178,13 @@ export class NotificationClient {
         },
       },
     );
+
+    // Verify the response indicates success
+    if (!response || !response.data) {
+      throw new Error('Failed to save media file: Invalid response from backend');
+    }
+
+    return response.data;
   }
 
   async saveFileMessage(idMessage, content, type, urlFile, token) {
@@ -181,6 +202,12 @@ export class NotificationClient {
           },
         },
       );
+
+      // Verify the response indicates success
+      if (!response || !response.data) {
+        throw new Error('Failed to save message file: Invalid response from messages service');
+      }
+
       return response.data;
     } catch (error: any) {
       // Re-throw the error for proper error handling
