@@ -31,6 +31,9 @@ spec:
         image: redis:7
         ports:
         - containerPort: 6379
+        envFrom:
+        - secretRef:
+            name: file-service-env-vars
         volumeMounts:
         - name: redis-storage
           mountPath: /data
@@ -39,9 +42,6 @@ spec:
         persistentVolumeClaim:
           claimName: redis-data-pvc
 
-      envFrom:
-      - secretRef:
-          name: file-service-env-vars
 ---
 apiVersion: v1
 kind: Service
