@@ -31,19 +31,13 @@ spec:
         image: socialworky/worky-file-service-dev:fa330f05f664f3842e003412ee1d0f75570742f9
         ports:
         - containerPort: 3005
-        
-        # env:
-        # - name: NODE_ENV
-        #   value: "development"
-        
-        # - name: APP_PORT
-        #   value: "3005"
-        
-        # - name: REDIS_HOST
-        #   value: "social-network-redis-service"
-        # - name: REDIS_PORT
-        #   value: "6379"
-
+        resources:
+          requests:
+            memory: "128Mi" 
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
         envFrom:
         - secretRef:
             name: file-service-env-vars

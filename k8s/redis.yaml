@@ -31,6 +31,13 @@ spec:
         image: redis:7
         ports:
         - containerPort: 6379
+        resources:
+          requests:
+            memory: "64Mi"   
+            cpu: "50m"       
+          limits:
+            memory: "256Mi"  
+            cpu: "500m"
         envFrom:
         - secretRef:
             name: file-service-env-vars
