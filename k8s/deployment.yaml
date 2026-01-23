@@ -17,7 +17,7 @@ metadata:
   name: file-service
   namespace: social-network-dev
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: file-service
@@ -40,11 +40,11 @@ spec:
 
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "512Mi"
+            memory: "256Mi"
             cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
 
         # APP_PORT is loaded from secret file-service-env-vars
         # IMPORTANT: The containerPort value above MUST match APP_PORT in the secret
