@@ -31,21 +31,41 @@ spec:
         image: socialworky/worky-file-service-dev:53632ace3e6b5a3f4b461ef3bace8d1416d2cab5
         ports:
         - containerPort: 3005
+
         resources:
           requests:
-            memory: "128Mi" 
+            memory: "128Mi"
             cpu: "100m"
           limits:
             memory: "512Mi"
             cpu: "500m"
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 3005
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3005
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
         envFrom:
         - secretRef:
             name: file-service-env-vars
-        
+
         volumeMounts:
         - name: file-storage
           mountPath: /app/uploads
-      
+
       volumes:
       - name: file-storage
         persistentVolumeClaim:

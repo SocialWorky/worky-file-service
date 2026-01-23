@@ -17,6 +17,7 @@ import { BullModule } from '@nestjs/bull';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
       redis: {
         host: process.env.REDIS_HOST,
         port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
+        password: process.env.REDIS_PASSWORD || undefined,
       },
     }),
     BullModule.registerQueue({
@@ -53,7 +55,7 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
             fs.mkdirSync(uploadPath, { recursive: true });
             callback(null, uploadPath);
           } catch (err) {
-            callback(new Error('Error creando directorio de destino'), null);
+            callback(new Error('Error creating destination directory'), null);
           }
         },
         filename: (req, file, callback) => {
@@ -73,6 +75,7 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
     ConfigModule.forRoot({ isGlobal: true }),
     UploadModule,
     FileProcessingModule,
+    HealthModule,
   ],
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],
