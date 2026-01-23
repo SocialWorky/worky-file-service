@@ -21,7 +21,7 @@ import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
-    // Health module first for route priority
+    // Health module first for route priority - must be before AppController
     HealthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     AuthModule,
@@ -78,7 +78,9 @@ import { HealthModule } from './health/health.module';
     UploadModule,
     FileProcessingModule,
   ],
-  controllers: [AppController, UploadController],
+  // Controllers order matters: HealthController (from HealthModule) is registered first
+  // AppController is last to avoid intercepting /health routes
+  controllers: [UploadController, AppController],
   providers: [AppService, UploadService],
 })
 export class AppModule {}

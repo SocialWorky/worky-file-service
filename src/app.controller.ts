@@ -15,9 +15,12 @@ export class AppController {
     @Res() res,
   ): Observable<Object> {
     // Skip reserved paths - let other controllers handle them
+    // This must be checked FIRST before any processing
     const reservedPaths = ['health', 'upload', 'api'];
     if (reservedPaths.includes(type)) {
-      throw new NotFoundException();
+      // Return 404 to let NestJS routing continue to other controllers
+      // This prevents the catch-all from intercepting reserved routes
+      throw new NotFoundException(`Route reserved: ${type}`);
     }
 
     const filePath = join(process.cwd(), 'uploads', type, filename);
