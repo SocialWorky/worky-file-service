@@ -13,11 +13,39 @@ async function bootstrap() {
   }));
 
   const corsOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',')
+    ? process.env.CORS_ORIGINS.split(',').filter(o => o.trim())
     : [];
 
-  // In development, allow localhost if no CORS_ORIGINS configured
+  // Check if we're in a dev/staging environment
+  // This allows localhost access when running in dev/staging environments
   const isDevelopment = process.env.NODE_ENV !== 'production';
+  const envName = process.env.ENVIRONMENT || process.env.ENV || '';
+  const appUrl = process.env.APP_URL || process.env.BASE_URL || '';
+  const namespace = process.env.NAMESPACE || process.env.KUBERNETES_NAMESPACE || '';
+  
+  // Consider it a dev environment if:
+  // 1. NODE_ENV is not production
+  // 2. ENVIRONMENT contains dev/staging/test
+  // 3. APP_URL/BASE_URL contains "dev" or "staging"
+  // 4. NAMESPACE contains "dev" or "staging"
+  // 5. If CORS_ORIGINS is empty, assume it's dev (more permissive)
+  const isDevEnvironment = isDevelopment || 
+                           envName.toLowerCase().includes('dev') || 
+                           envName.toLowerCase().includes('development') ||
+                           envName.toLowerCase().includes('staging') ||
+                           envName.toLowerCase().includes('test') ||
+                           appUrl.toLowerCase().includes('dev') ||
+                           appUrl.toLowerCase().includes('staging') ||
+                           namespace.toLowerCase().includes('dev') ||
+                           namespace.toLowerCase().includes('staging') ||
+                           corsOrigins.length === 0; // If no CORS_ORIGINS configured, be permissive
+  
+  // Build allowed origins list - always include localhost for dev environments
+  const allowedOrigins = corsOrigins.length > 0 
+    ? [...corsOrigins, ...(isDevEnvironment ? ['http://localhost:4200', 'http://localhost:4201'] : [])]
+    : (isDevEnvironment ? ['http://localhost:4200', 'http://localhost:4201'] : []);
+
+  logger.log(`CORS configuration: isDevEnvironment=${isDevEnvironment}, envName=${envName}, appUrl=${appUrl}, namespace=${namespace}, corsOrigins=${corsOrigins.length}, allowedOrigins=${allowedOrigins.join(', ')}`);
 
   app.enableCors({
     origin: (origin, callback) => {
@@ -27,27 +55,53 @@ async function bootstrap() {
         return;
       }
 
-      // In development with no CORS_ORIGINS, allow localhost
-      if (isDevelopment && corsOrigins.length === 0 && origin.includes('localhost')) {
+      // In dev/staging environments, ALWAYS allow localhost origins for local development
+      // This works even if CORS_ORIGINS is configured - it's a safety net for dev environments
+      if (isDevEnvironment && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
+        logger.log(`CORS: Allowing localhost origin ${origin} in dev environment`);
         callback(null, true);
         return;
       }
+      
+      // Also allow localhost if the request host contains "dev" or "staging"
+      // This catches cases where the service is behind a proxy/ingress
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        // Check if we can detect dev environment from request context
+        // For now, be permissive if no CORS_ORIGINS is configured
+        if (corsOrigins.length === 0) {
+          logger.log(`CORS: Allowing localhost origin ${origin} (no CORS_ORIGINS configured)`);
+          callback(null, true);
+          return;
+        }
+      }
 
-      if (corsOrigins.includes(origin)) {
+      if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        logger.warn(`CORS blocked request from: ${origin}`);
+        logger.warn(`CORS blocked request from: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-request-timeout',
+      'x-requested-with',
+      'accept',
+      'origin',
+      'access-control-request-method',
+      'access-control-request-headers'
+    ],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   // Note: No global prefix for file-service since it serves static files at root level
   // Routes: /:type/:filename for files, /upload for uploads, /health for health checks
 
-  const port = parseInt(process.env.APP_PORT) || 3005;
+  const port = parseInt(process.env.APP_PORT || '3005', 10);
   
   try {
     await app.listen(port, '0.0.0.0');

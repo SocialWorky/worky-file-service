@@ -7,7 +7,11 @@ spec:
   selector:
     app: file-service
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 80
+      # IMPORTANT: targetPort must match APP_PORT from file-service-env-vars secret
+      # Production may use different port than development
+      # Default: 3005 if APP_PORT is not set (for development)
       targetPort: 3005
   type: ClusterIP
