@@ -1,4 +1,3 @@
-# PVC is defined in pvc.yaml (apply separately, only once)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
