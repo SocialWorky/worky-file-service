@@ -7,6 +7,22 @@ async function bootstrap() {
   const logger = new Logger('Main');
   const app = await NestFactory.create(AppModule);
 
+  // CRITICAL: Register health endpoints as Express middleware BEFORE NestJS routes
+  // This ensures health checks are handled before the catch-all file route (:type/:filename)
+  const expressApp = app.getHttpAdapter().getInstance();
+
+  expressApp.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  expressApp.get('/health/live', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  expressApp.get('/health/ready', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
   app.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production',
     crossOriginResourcePolicy: { policy: 'cross-origin' },
