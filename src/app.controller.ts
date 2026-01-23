@@ -1,7 +1,8 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Res, NotFoundException } from '@nestjs/common';
 import { AppService } from './app.service';
 import { Observable, of } from 'rxjs';
 import { join } from 'path';
+import * as fs from 'fs';
 
 @Controller()
 export class AppController {
@@ -9,13 +10,22 @@ export class AppController {
 
   @Get(':type/:filename')
   getFile(
-    @Param('type') type,
-    @Param('filename') filename,
+    @Param('type') type: string,
+    @Param('filename') filename: string,
     @Res() res,
-    // eslint-disable-next-line @typescript-eslint/ban-types
   ): Observable<Object> {
-    return of(
-      res.sendFile(join(process.cwd(), 'uploads/' + type + '/' + filename)),
-    );
+    // Skip reserved paths - let other controllers handle them
+    const reservedPaths = ['health', 'upload', 'api'];
+    if (reservedPaths.includes(type)) {
+      throw new NotFoundException();
+    }
+
+    const filePath = join(process.cwd(), 'uploads', type, filename);
+
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException(`File not found: ${type}/${filename}`);
+    }
+
+    return of(res.sendFile(filePath));
   }
 }

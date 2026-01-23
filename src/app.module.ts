@@ -21,6 +21,9 @@ import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
+    // Health module first for route priority
+    HealthModule,
+    ConfigModule.forRoot({ isGlobal: true }),
     AuthModule,
     BullModule.forRoot({
       redis: {
@@ -72,10 +75,8 @@ import { HealthModule } from './health/health.module';
         },
       }),
     }),
-    ConfigModule.forRoot({ isGlobal: true }),
     UploadModule,
     FileProcessingModule,
-    HealthModule,
   ],
   controllers: [AppController, UploadController],
   providers: [AppService, UploadService],
