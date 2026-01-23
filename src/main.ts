@@ -98,6 +98,7 @@ async function bootstrap() {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'Cache-Control',
       'x-request-timeout',
       'x-requested-with',
       'accept',
