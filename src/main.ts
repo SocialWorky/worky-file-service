@@ -109,7 +109,11 @@ async function bootstrap() {
     logger.log(`Health check available at: http://0.0.0.0:${port}/health`);
     logger.log(`Liveness probe: http://0.0.0.0:${port}/health/live`);
     logger.log(`Readiness probe: http://0.0.0.0:${port}/health/ready`);
-    logger.log(`Bull Board is available at: ${process.env.BASE_URL || 'http://localhost:' + port}/api/queues`);
+    
+    // Normalize BASE_URL to remove trailing slash before concatenating
+    const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    logger.log(`Bull Board is available at: ${normalizedBaseUrl}/api/queues`);
   } catch (error) {
     logger.error(`Failed to start application on port ${port}:`, error);
     throw error;
