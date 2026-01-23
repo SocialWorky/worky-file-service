@@ -61,8 +61,6 @@ async function bootstrap() {
     ? [...corsOrigins, ...(isDevEnvironment ? ['http://localhost:4200', 'http://localhost:4201'] : [])]
     : (isDevEnvironment ? ['http://localhost:4200', 'http://localhost:4201'] : []);
 
-  logger.log(`CORS configuration: isDevEnvironment=${isDevEnvironment}, envName=${envName}, appUrl=${appUrl}, namespace=${namespace}, corsOrigins=${corsOrigins.length}, allowedOrigins=${allowedOrigins.join(', ')}`);
-
   app.enableCors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, curl, etc.)
@@ -74,7 +72,6 @@ async function bootstrap() {
       // In dev/staging environments, ALWAYS allow localhost origins for local development
       // This works even if CORS_ORIGINS is configured - it's a safety net for dev environments
       if (isDevEnvironment && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
-        logger.log(`CORS: Allowing localhost origin ${origin} in dev environment`);
         callback(null, true);
         return;
       }
@@ -85,7 +82,6 @@ async function bootstrap() {
         // Check if we can detect dev environment from request context
         // For now, be permissive if no CORS_ORIGINS is configured
         if (corsOrigins.length === 0) {
-          logger.log(`CORS: Allowing localhost origin ${origin} (no CORS_ORIGINS configured)`);
           callback(null, true);
           return;
         }
