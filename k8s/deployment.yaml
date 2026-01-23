@@ -17,7 +17,10 @@ metadata:
   name: file-service
   namespace: social-network-dev
 spec:
-  replicas: 2
+  replicas: 1
+  # Recreate strategy required for ReadWriteOnce volumes
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: file-service
