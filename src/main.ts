@@ -48,8 +48,17 @@ async function bootstrap() {
   // Routes: /:type/:filename for files, /upload for uploads, /health for health checks
 
   const port = parseInt(process.env.APP_PORT) || 3005;
-  await app.listen(port);
-  logger.log(`Application is running on port: ${port}`);
-  logger.log(`Bull Board is available at: ${process.env.BASE_URL || 'http://localhost:' + port}/api/queues`);
+  
+  try {
+    await app.listen(port, '0.0.0.0');
+    logger.log(`Application is running on port: ${port}`);
+    logger.log(`Health check available at: http://0.0.0.0:${port}/health`);
+    logger.log(`Liveness probe: http://0.0.0.0:${port}/health/live`);
+    logger.log(`Readiness probe: http://0.0.0.0:${port}/health/ready`);
+    logger.log(`Bull Board is available at: ${process.env.BASE_URL || 'http://localhost:' + port}/api/queues`);
+  } catch (error) {
+    logger.error(`Failed to start application on port ${port}:`, error);
+    throw error;
+  }
 }
 bootstrap();

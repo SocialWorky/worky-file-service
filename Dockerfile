@@ -33,7 +33,9 @@ RUN npm run build
 
 # Final stage for production
 FROM base as prod
+EXPOSE 3005
 WORKDIR /app
+ENV APP_PORT=3005
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
