@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: file-service
-        image: socialworky/worky-file-service-dev:53632ace3e6b5a3f4b461ef3bace8d1416d2cab5
+        image: socialworky/worky-file-service-dev:ef22f88644e067381412ae7cfcb293eb2e46cf81
         ports:
         - containerPort: 3005
 
