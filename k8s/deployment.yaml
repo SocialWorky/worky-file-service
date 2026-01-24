@@ -4,7 +4,7 @@ metadata:
   name: files-pvc
   namespace: social-network-dev
   annotations:
-    argocd.argoproj.io/sync-options: Prune=false,Replace=false
+    argocd.argoproj.io/sync-options: Prune=false,Replace=false,SkipHealthCheck=true
 spec:
   accessModes:
     - ReadWriteOnce
