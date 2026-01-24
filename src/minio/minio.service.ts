@@ -53,9 +53,8 @@ export class MinioService implements OnModuleInit {
       await this.minioClient.fPutObject(this.bucket, objectName, filePath, metaData);
       this.logger.log(`File uploaded: ${objectName}`);
 
-      // Return the public URL
-      const minioPublicUrl = this.configService.get<string>('MINIO_PUBLIC_URL', 'http://localhost:9000');
-      return `${minioPublicUrl}/${this.bucket}/${objectName}`;
+      // Return relative path (frontend will construct full URL using MINIO_BUCKET_URL)
+      return objectName;
     } catch (error) {
       this.logger.error(`Error uploading file: ${error.message}`);
       throw error;
@@ -79,8 +78,8 @@ export class MinioService implements OnModuleInit {
       await this.minioClient.putObject(this.bucket, objectName, buffer, buffer.length, metaData);
       this.logger.log(`Buffer uploaded: ${objectName}`);
 
-      const minioPublicUrl = this.configService.get<string>('MINIO_PUBLIC_URL', 'http://localhost:9000');
-      return `${minioPublicUrl}/${this.bucket}/${objectName}`;
+      // Return relative path (frontend will construct full URL using MINIO_BUCKET_URL)
+      return objectName;
     } catch (error) {
       this.logger.error(`Error uploading buffer: ${error.message}`);
       throw error;

@@ -7,6 +7,11 @@ export interface MediaFileUpload {
   optimized?: string;
   compressed?: string;
   originalname?: string;
+  // MinIO relative URLs (from uploadService.processFile)
+  url?: string;
+  urlThumbnail?: string;
+  urlCompressed?: string;
+  urlOptimized?: string;
 }
 
 export enum TypePublishing {
@@ -90,13 +95,6 @@ export class NotificationClient {
   ) {
     const file = response;
     try {
-      const filename = this.isVideoUrl(file.filename)
-        ? file.optimized!
-        : file.filename;
-      const filenameCompressed = this.isVideoUrl(file.filename)
-        ? file.optimized!
-        : file.compressed!;
-
       let content = '';
       let typeFile: MessageType;
 
@@ -105,22 +103,35 @@ export class NotificationClient {
         typeFile = MessageType.IMAGE;
         if (this.isVideoUrl(file.filename)) {
           typeFile = MessageType.VIDEO;
-          const videoSaved = this.BASE_URL + 'messages/' + file.thumbnail;
-          urlFile = this.BASE_URL + 'messages/' + file.optimized;
+          // Use relative paths from MinIO (file.urlThumbnail and file.urlOptimized are already relative)
+          // These come from uploadService.processFile which returns MinIO relative paths
+          const videoSaved = file.urlThumbnail || `messages/${file.thumbnail}`;
+          urlFile = file.urlOptimized || file.url || `messages/${file.optimized || file.filename}`;
+          // For markdown content, use the thumbnail URL (relative path)
           content = `![Image](${videoSaved})`;
         } else {
-          const imagenSaved = this.BASE_URL + 'messages/' + file.filename;
-          urlFile = this.BASE_URL + 'messages/' + file.filename;
+          // Use relative paths from MinIO (file.url is already relative like "messages/filename.jpg")
+          // Prefer urlCompressed for display, fallback to url, then construct from filename
+          const imagenSaved = file.urlCompressed || file.url || `messages/${file.filename}`;
+          urlFile = file.url || `messages/${file.filename}`;
           content = `![Image](${imagenSaved})`;
         }
 
         await this.saveFileMessage(id, content, typeFile, urlFile, token);
         return { content, typeFile, urlFile };
       } else {
+        // Use MinIO relative URLs directly instead of constructing URLs with saveLocation
+        // uploadService.processFile returns relative MinIO paths like "comment/filename.jpg"
+        const url = file.url;
+        const urlThumbnail = file.urlThumbnail;
+        const urlCompressed = this.isVideoUrl(file.filename)
+          ? file.urlOptimized || file.url
+          : file.urlCompressed || file.url;
+
         await this.saveUrlFile(
-          saveLocation + filename,
-          saveLocation + file.thumbnail,
-          saveLocation + filenameCompressed,
+          url,
+          urlThumbnail,
+          urlCompressed,
           id,
           type,
           token,

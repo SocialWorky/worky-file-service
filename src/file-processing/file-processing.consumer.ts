@@ -15,15 +15,22 @@ export class FileProcessingConsumer {
     const { file, userId, idReference, urlMedia, type, token } = job.data;
 
     try {
-      const result = await this.uploadService.processFile(file, userId);
-      
+      // Pass all parameters to processFile so files are stored in correct MinIO folder
+      const result = await this.uploadService.processFile(
+        file,
+        userId,
+        idReference,
+        urlMedia,
+        type,
+      );
+
       // If type is profileImg, return the result directly
       if (type === 'profileImg') {
         // Use moveToCompleted so the controller can get the result
         await job.moveToCompleted(result, undefined, true);
         return result;
       }
-      
+
       // For other types, send notification as before
       await this.notificationClient.sendNotification({
         userId,
