@@ -18,12 +18,14 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { HealthModule } from './health/health.module';
+import { MinioModule } from './minio/minio.module';
 
 @Module({
   imports: [
     // Health module first for route priority - must be before AppController
     HealthModule,
     ConfigModule.forRoot({ isGlobal: true }),
+    MinioModule,
     AuthModule,
     BullModule.forRoot({
       redis: {

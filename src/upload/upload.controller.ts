@@ -78,16 +78,16 @@ export class UploadController {
             throw new BadRequestException('Could not process the file');
           }
           
-          // The result will contain the processing result
-          // Format the response as requested
+          // The result will contain the processing result with MinIO URLs
           const formattedResult = {
-            url: `${process.env.BASE_URL || 'http://localhost:3000'}uploads/${result.filename}`,
-            urlThumbnail: `${process.env.BASE_URL || 'http://localhost:3000'}uploads/${result.thumbnail}`,
-            urlCompressed: `${process.env.BASE_URL || 'http://localhost:3000'}uploads/${result.compressed}`,
+            url: result.url,
+            urlThumbnail: result.urlThumbnail,
+            urlCompressed: result.urlCompressed,
+            urlOptimized: result.urlOptimized,
             name: result.originalname,
             filename: result.filename,
           };
-          
+
           results.push(formattedResult);
         } catch (error) {
           throw new BadRequestException(`Error processing file ${file.originalname}: ${error.message}`);

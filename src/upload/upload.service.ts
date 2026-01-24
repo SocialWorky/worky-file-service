@@ -1,15 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as sharp from 'sharp';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as path from 'path';
 import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { promisify } from 'util';
+import { MinioService } from '../minio/minio.service';
 
 const unlinkAsync = promisify(fs.unlink);
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+
 @Injectable()
 export class UploadService {
+  private readonly logger = new Logger(UploadService.name);
+
+  constructor(private readonly minioService: MinioService) {}
   /**
    * Processes the upload of multiple files.
    * @param files The files to upload.
@@ -52,7 +57,7 @@ export class UploadService {
   }
 
   /**
-   * Processes a single file, optimizing it according to its type.
+   * Processes a single file, optimizing it according to its type and uploading to MinIO.
    * @param file The file to process.
    * @param userId The ID of the user uploading the file.
    * @returns A promise that resolves with an object containing processed file information.
@@ -67,17 +72,116 @@ export class UploadService {
   ): Promise<any> {
     try {
       const optimizedData = await this.optimizeFile(file);
+      const directory = path.dirname(file.path);
+      const destination = type || 'uploads';
+
+      // Upload files to MinIO
+      const minioUrls = await this.uploadToMinio(
+        directory,
+        destination,
+        file.filename,
+        optimizedData,
+      );
+
+      // Clean up local files
+      await this.cleanupLocalFiles(directory, file.filename, optimizedData);
+
       return {
         originalname: file.originalname,
         filename: file.filename,
         ...optimizedData,
+        ...minioUrls,
         userId,
         idReference,
         urlMedia,
         type,
       };
     } catch (error) {
+      this.logger.error(`Error processing file: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Uploads processed files to MinIO
+   */
+  private async uploadToMinio(
+    directory: string,
+    destination: string,
+    originalFilename: string,
+    optimizedData: any,
+  ): Promise<{ url: string; urlThumbnail: string; urlCompressed?: string; urlOptimized?: string }> {
+    const urls: any = {};
+
+    // Upload original file
+    const originalPath = path.join(directory, originalFilename);
+    if (fs.existsSync(originalPath)) {
+      urls.url = await this.minioService.uploadFile(originalPath, destination, originalFilename);
+    }
+
+    // Upload thumbnail
+    if (optimizedData.thumbnail) {
+      const thumbnailPath = path.join(directory, optimizedData.thumbnail);
+      if (fs.existsSync(thumbnailPath)) {
+        urls.urlThumbnail = await this.minioService.uploadFile(
+          thumbnailPath,
+          destination,
+          optimizedData.thumbnail,
+        );
+      }
+    }
+
+    // Upload compressed (for images)
+    if (optimizedData.compressed) {
+      const compressedPath = path.join(directory, optimizedData.compressed);
+      if (fs.existsSync(compressedPath)) {
+        urls.urlCompressed = await this.minioService.uploadFile(
+          compressedPath,
+          destination,
+          optimizedData.compressed,
+        );
+      }
+    }
+
+    // Upload optimized (for videos)
+    if (optimizedData.optimized) {
+      const optimizedPath = path.join(directory, optimizedData.optimized);
+      if (fs.existsSync(optimizedPath)) {
+        urls.urlOptimized = await this.minioService.uploadFile(
+          optimizedPath,
+          destination,
+          optimizedData.optimized,
+        );
+      }
+    }
+
+    return urls;
+  }
+
+  /**
+   * Cleans up local files after uploading to MinIO
+   */
+  private async cleanupLocalFiles(
+    directory: string,
+    originalFilename: string,
+    optimizedData: any,
+  ): Promise<void> {
+    const filesToDelete = [originalFilename];
+
+    if (optimizedData.thumbnail) filesToDelete.push(optimizedData.thumbnail);
+    if (optimizedData.compressed) filesToDelete.push(optimizedData.compressed);
+    if (optimizedData.optimized) filesToDelete.push(optimizedData.optimized);
+
+    for (const fileName of filesToDelete) {
+      const filePath = path.join(directory, fileName);
+      try {
+        if (fs.existsSync(filePath)) {
+          await unlinkAsync(filePath);
+          this.logger.log(`Deleted local file: ${filePath}`);
+        }
+      } catch (error) {
+        this.logger.warn(`Could not delete file ${filePath}: ${error.message}`);
+      }
     }
   }
 
