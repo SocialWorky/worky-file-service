@@ -222,8 +222,20 @@ export class UploadService {
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
 
-    const compressedPath = path.join(directory, `compressed|${basename}${ext}`);
-    const thumbnailPath = path.join(directory, `thumbnail|${basename}${ext}`);
+    // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
+    // This creates a subdirectory structure: compressed/filename.jpg
+    const compressedPath = path.join(directory, `compressed`, `${basename}${ext}`);
+    const thumbnailPath = path.join(directory, `thumbnail`, `${basename}${ext}`);
+
+    // Ensure directories exist
+    const compressedDir = path.dirname(compressedPath);
+    const thumbnailDir = path.dirname(thumbnailPath);
+    if (!fs.existsSync(compressedDir)) {
+      fs.mkdirSync(compressedDir, { recursive: true });
+    }
+    if (!fs.existsSync(thumbnailDir)) {
+      fs.mkdirSync(thumbnailDir, { recursive: true });
+    }
 
     try {
       await sharp(filePath)
@@ -239,9 +251,10 @@ export class UploadService {
       throw error;
     }
 
+    // Return paths with forward slash for MinIO compatibility
     return {
-      compressed: `compressed|${basename}${ext}`,
-      thumbnail: `thumbnail|${basename}${ext}`,
+      compressed: `compressed/${basename}${ext}`,
+      thumbnail: `thumbnail/${basename}${ext}`,
     };
   }
 
@@ -257,7 +270,14 @@ export class UploadService {
     const directory = path.dirname(filePath);
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
-    const optimizedPath = path.join(directory, `worky|${basename}.mp4`);
+    // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
+    const optimizedPath = path.join(directory, 'worky', `${basename}.mp4`);
+
+    // Ensure directory exists
+    const optimizedDir = path.dirname(optimizedPath);
+    if (!fs.existsSync(optimizedDir)) {
+      fs.mkdirSync(optimizedDir, { recursive: true });
+    }
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
@@ -276,8 +296,8 @@ export class UploadService {
             await this.generateVideoThumbnail(optimizedPath);
 
             resolve({
-              optimized: `worky|${basename}.mp4`,
-              thumbnail: `thumbnail|worky|${basename}.jpg`,
+              optimized: `worky/${basename}.mp4`,
+              thumbnail: `thumbnail/worky/${basename}.jpg`,
             });
           } catch (err) {
             reject(err);
@@ -300,14 +320,19 @@ export class UploadService {
     const directory = path.dirname(filePath);
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
-    const thumbnailPath = path.join(directory, `thumbnail|${basename}.jpg`);
+    // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
+    const thumbnailDir = path.join(directory, 'thumbnail');
+    if (!fs.existsSync(thumbnailDir)) {
+      fs.mkdirSync(thumbnailDir, { recursive: true });
+    }
+    const thumbnailPath = path.join(thumbnailDir, `${basename}.jpg`);
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
         .screenshots({
           count: 1,
-          folder: directory,
-          filename: `thumbnail|${basename}.jpg`,
+          folder: thumbnailDir,
+          filename: `${basename}.jpg`,
           size: '320x240',
           timemarks: ['00:00:01'],
         })

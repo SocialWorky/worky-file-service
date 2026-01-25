@@ -31,8 +31,60 @@ export class MinioService implements OnModuleInit {
       } else {
         this.logger.log(`Bucket "${this.bucket}" already exists`);
       }
+      
+      // Set bucket policy to allow public read access
+      await this.setBucketPublicPolicy();
+      
+      // Set CORS policy to allow cross-origin requests
+      await this.setBucketCorsPolicy();
     } catch (error) {
       this.logger.error(`Error checking/creating bucket: ${error.message}`);
+    }
+  }
+
+  /**
+   * Sets bucket policy to allow public read access
+   */
+  private async setBucketPublicPolicy(): Promise<void> {
+    try {
+      const policy = {
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Effect: 'Allow',
+            Principal: { AWS: ['*'] },
+            Action: ['s3:GetObject'],
+            Resource: [`arn:aws:s3:::${this.bucket}/*`],
+          },
+        ],
+      };
+
+      await this.minioClient.setBucketPolicy(this.bucket, JSON.stringify(policy));
+      this.logger.log(`Bucket policy set for "${this.bucket}"`);
+    } catch (error) {
+      this.logger.warn(`Could not set bucket policy: ${error.message}`);
+    }
+  }
+
+  /**
+   * Sets CORS policy to allow cross-origin requests from frontend
+   */
+  private async setBucketCorsPolicy(): Promise<void> {
+    try {
+      const corsConfig = [
+        {
+          AllowedOrigins: ['*'],
+          AllowedMethods: ['GET', 'HEAD'],
+          AllowedHeaders: ['*'],
+          ExposeHeaders: ['ETag'],
+          MaxAgeSeconds: 3000,
+        },
+      ];
+
+      await this.minioClient.setBucketCors(this.bucket, corsConfig);
+      this.logger.log(`CORS policy set for "${this.bucket}"`);
+    } catch (error) {
+      this.logger.warn(`Could not set CORS policy: ${error.message}`);
     }
   }
 
