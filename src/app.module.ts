@@ -68,11 +68,13 @@ import { MinioModule } from './minio/minio.module';
           if (!userId) {
             return callback(new Error('userId is required'), null);
           }
+
+          const cleanUserId = userId.toString().replace(/[|<>:"\/\\?*\x00-\x1F]/g, '');
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
           const ext = extname(file.originalname);
           const basename = path.basename(file.originalname, ext);
           const cleanedBasename = basename.replace(/\s+/g, '');
-          const filename = `${userId}-${timestamp}-${cleanedBasename}${ext}`;
+          const filename = `${cleanUserId}-${timestamp}-${cleanedBasename}${ext}`;
           callback(null, filename);
         },
       }),

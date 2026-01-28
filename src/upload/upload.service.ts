@@ -224,8 +224,8 @@ export class UploadService {
 
     // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
     // This creates a subdirectory structure: compressed/filename.jpg
-    const compressedPath = path.join(directory, `compressed`, `${basename}${ext}`);
-    const thumbnailPath = path.join(directory, `thumbnail`, `${basename}${ext}`);
+    const compressedPath = path.join(directory, `compressed-${basename}${ext}`);
+    const thumbnailPath = path.join(directory, `thumbnail-${basename}${ext}`);
 
     // Ensure directories exist
     const compressedDir = path.dirname(compressedPath);
@@ -253,8 +253,8 @@ export class UploadService {
 
     // Return paths with forward slash for MinIO compatibility
     return {
-      compressed: `compressed/${basename}${ext}`,
-      thumbnail: `thumbnail/${basename}${ext}`,
+      compressed: `compressed-${basename}${ext}`,
+      thumbnail: `thumbnail-${basename}${ext}`,
     };
   }
 
@@ -271,7 +271,7 @@ export class UploadService {
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
     // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
-    const optimizedPath = path.join(directory, 'worky', `${basename}.mp4`);
+    const optimizedPath = path.join(directory, `worky-${basename}.mp4`);
 
     // Ensure directory exists
     const optimizedDir = path.dirname(optimizedPath);
@@ -296,8 +296,8 @@ export class UploadService {
             await this.generateVideoThumbnail(optimizedPath);
 
             resolve({
-              optimized: `worky/${basename}.mp4`,
-              thumbnail: `thumbnail/worky/${basename}.jpg`,
+              optimized: `worky-${basename}.mp4`,
+              thumbnail: `thumbnail-worky-${basename}.jpg`,
             });
           } catch (err) {
             reject(err);
@@ -321,18 +321,18 @@ export class UploadService {
     const ext = path.extname(filePath);
     const basename = path.basename(filePath, ext);
     // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
-    const thumbnailDir = path.join(directory, 'thumbnail');
+    const thumbnailDir = path.join(directory, 'thumbnail-worky');
     if (!fs.existsSync(thumbnailDir)) {
       fs.mkdirSync(thumbnailDir, { recursive: true });
     }
-    const thumbnailPath = path.join(thumbnailDir, `${basename}.jpg`);
+    const thumbnailPath = path.join(thumbnailDir, `thumbnail-worky-${basename}.jpg`);
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
         .screenshots({
           count: 1,
           folder: thumbnailDir,
-          filename: `${basename}.jpg`,
+          filename: `thumbnail-worky-${basename}.jpg`,
           size: '320x240',
           timemarks: ['00:00:01'],
         })
