@@ -67,25 +67,13 @@ export class MinioService implements OnModuleInit {
   }
 
   /**
-   * Sets CORS policy to allow cross-origin requests from frontend
+   * CORS configuration note:
+   * CORS must be configured at the MinIO server level, not via the client SDK.
+   * Configure CORS using the MinIO Console or the `mc` CLI tool:
+   * mc admin config set ALIAS cors allow_origin="*"
    */
   private async setBucketCorsPolicy(): Promise<void> {
-    try {
-      const corsConfig = [
-        {
-          AllowedOrigins: ['*'],
-          AllowedMethods: ['GET', 'HEAD'],
-          AllowedHeaders: ['*'],
-          ExposeHeaders: ['ETag'],
-          MaxAgeSeconds: 3000,
-        },
-      ];
-
-      await this.minioClient.setBucketCors(this.bucket, corsConfig);
-      this.logger.log(`CORS policy set for "${this.bucket}"`);
-    } catch (error) {
-      this.logger.warn(`Could not set CORS policy: ${error.message}`);
-    }
+    this.logger.log('CORS must be configured at the MinIO server level');
   }
 
   /**
