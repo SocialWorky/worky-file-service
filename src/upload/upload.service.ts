@@ -19,11 +19,13 @@ export class UploadService {
    * Processes the upload of multiple files.
    * @param files The files to upload.
    * @param userId The ID of the user uploading the files.
+   * @param destination The destination folder in MinIO.
    * @returns A promise that resolves with an array of file processing results.
    */
   async uploadFiles(
     files: Express.Multer.File[],
     userId: string,
+    destination?: string,
     idReference?: string,
     urlMedia?: string,
     type?: string,
@@ -35,6 +37,7 @@ export class UploadService {
         const result = await this.processFile(
           file,
           userId,
+          destination,
           idReference,
           urlMedia,
           type,
@@ -46,6 +49,7 @@ export class UploadService {
           filename: file.filename,
           error: error.message,
           userId,
+          destination,
           idReference,
           urlMedia,
           type,
@@ -60,12 +64,14 @@ export class UploadService {
    * Processes a single file, optimizing it according to its type and uploading to MinIO.
    * @param file The file to process.
    * @param userId The ID of the user uploading the file.
+   * @param destination The destination folder in MinIO (e.g., 'publications', 'emojis', 'comments').
    * @returns A promise that resolves with an object containing processed file information.
    * @throws Error if any problem occurs during file processing.
    */
   public async processFile(
     file: Express.Multer.File,
     userId: string,
+    destination?: string,
     idReference?: string,
     urlMedia?: string,
     type?: string,
@@ -73,12 +79,13 @@ export class UploadService {
     try {
       const optimizedData = await this.optimizeFile(file);
       const directory = path.dirname(file.path);
-      const destination = type || 'uploads';
+      // Use destination from body, fallback to type, then 'uploads'
+      const minioDestination = destination || type || 'uploads';
 
       // Upload files to MinIO
       const minioUrls = await this.uploadToMinio(
         directory,
-        destination,
+        minioDestination,
         file.filename,
         optimizedData,
       );

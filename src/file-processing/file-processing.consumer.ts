@@ -12,13 +12,14 @@ export class FileProcessingConsumer {
 
   @Process('fileProcessing')
   async processJob(job: Job<any>) {
-    const { file, userId, idReference, urlMedia, type, token } = job.data;
+    const { file, userId, destination, idReference, urlMedia, type, token } = job.data;
 
     try {
       // Pass all parameters to processFile so files are stored in correct MinIO folder
       const result = await this.uploadService.processFile(
         file,
         userId,
+        destination,
         idReference,
         urlMedia,
         type,
