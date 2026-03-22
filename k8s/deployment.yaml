@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
       - name: file-service
-        image: socialworky/worky-file-service-dev:ac79e00c62addb1e266086b98b35addc10e30fcf
+        image: socialworky/worky-file-service-dev:72cbdfae3389b48ff0abc5c3a68a189b1139a676
         ports:
         # Port comes from APP_PORT environment variable (must be in file-service-env-vars secret)
         # IMPORTANT: This value MUST match APP_PORT in the secret
