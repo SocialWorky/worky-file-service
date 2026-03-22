@@ -162,6 +162,12 @@ export class UploadService {
       }
     }
 
+    // For videos, the original file is deleted during FFmpeg processing.
+    // Fall back url to urlOptimized so the backend always receives a valid URL.
+    if (!urls.url && urls.urlOptimized) {
+      urls.url = urls.urlOptimized;
+    }
+
     return urls;
   }
 
@@ -286,6 +292,9 @@ export class UploadService {
       fs.mkdirSync(optimizedDir, { recursive: true });
     }
 
+    const optimizedBasename = `worky-${basename}`;
+    const thumbnailFilename = `thumbnail-${optimizedBasename}.jpg`;
+
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
         .outputOptions([
@@ -300,11 +309,11 @@ export class UploadService {
           try {
             await unlinkAsync(filePath);
 
-            await this.generateVideoThumbnail(optimizedPath);
+            await this.generateVideoThumbnail(optimizedPath, directory, thumbnailFilename);
 
             resolve({
-              optimized: `worky-${basename}.mp4`,
-              thumbnail: `thumbnail-worky-${basename}.jpg`,
+              optimized: `${optimizedBasename}.mp4`,
+              thumbnail: thumbnailFilename,
             });
           } catch (err) {
             reject(err);
@@ -323,29 +332,21 @@ export class UploadService {
    * @returns A promise that resolves with the path of the thumbnail.
    * @throws Error if a problem occurs during extraction.
    */
-  private async generateVideoThumbnail(filePath: string): Promise<string> {
-    const directory = path.dirname(filePath);
-    const ext = path.extname(filePath);
-    const basename = path.basename(filePath, ext);
-    // Use forward slash (/) instead of pipe (|) to avoid MinIO URL encoding issues
-    const thumbnailDir = path.join(directory, 'thumbnail-worky');
-    if (!fs.existsSync(thumbnailDir)) {
-      fs.mkdirSync(thumbnailDir, { recursive: true });
-    }
-    const thumbnailPath = path.join(thumbnailDir, `thumbnail-worky-${basename}.jpg`);
+  private async generateVideoThumbnail(filePath: string, outputDir: string, thumbnailFilename: string): Promise<string> {
+    const thumbnailPath = path.join(outputDir, thumbnailFilename);
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
         .screenshots({
           count: 1,
-          folder: thumbnailDir,
-          filename: `thumbnail-worky-${basename}.jpg`,
+          folder: outputDir,
+          filename: thumbnailFilename,
           size: '320x240',
           timemarks: ['00:00:01'],
         })
         .on('end', () => {
           if (fs.existsSync(thumbnailPath)) {
-            resolve(thumbnailPath);
+            resolve(thumbnailFilename);
           } else {
             reject(new Error('Thumbnail not generated'));
           }
