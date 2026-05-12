@@ -4,17 +4,29 @@ import * as sharp from 'sharp';
 import * as ffmpeg from 'fluent-ffmpeg';
 import * as path from 'path';
 import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { encode as encodeBlurHash } from 'blurhash';
 import { StorageService } from '../storage/storage.service';
+import { DedupService } from '../dedup/dedup.service';
 
 const unlinkAsync = promisify(fs.unlink);
+const execFileAsync = promisify(execFile);
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+
+// ffprobe ships alongside ffmpeg in @ffmpeg-installer/ffmpeg
+const ffprobePath = (ffmpegInstaller as any).path.replace(/ffmpeg(\.exe)?$/, 'ffprobe$1');
+
+const BRIGHTNESS_THRESHOLD = 10;
 
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
 
-  constructor(private readonly storageService: StorageService) {}
+  constructor(
+    private readonly storageService: StorageService,
+    private readonly dedupService: DedupService,
+  ) {}
 
   async uploadFiles(
     files: Express.Multer.File[],
@@ -64,10 +76,19 @@ export class UploadService {
   ): Promise<any> {
     let optimizedData: any = null;
     const directory = path.dirname(file.path);
+    const minioDestination = destination || type || 'uploads';
 
     try {
+      // Deduplication check: if same bytes were already processed to the same destination,
+      // skip the entire pipeline and return cached URLs immediately.
+      const hash = await this.dedupService.computeHash(file.path);
+      const cached = await this.dedupService.getCached(hash, minioDestination);
+      if (cached) {
+        await unlinkAsync(file.path).catch(() => undefined);
+        return { ...cached, deduplicated: true };
+      }
+
       optimizedData = await this.optimizeFile(file);
-      const minioDestination = destination || type || 'uploads';
 
       const minioUrls = await this.uploadToStorage(
         directory,
@@ -78,7 +99,7 @@ export class UploadService {
 
       await this.cleanupLocalFiles(directory, file.filename, optimizedData);
 
-      return {
+      const result = {
         originalname: file.originalname,
         filename: file.filename,
         ...optimizedData,
@@ -87,7 +108,11 @@ export class UploadService {
         idReference,
         urlMedia,
         type,
+        deduplicated: false,
       };
+
+      await this.dedupService.setCached(hash, minioDestination, result);
+      return result;
     } catch (error) {
       this.logger.error(`Error processing file: ${error.message}`);
       // Only delete derived files (compressed, thumbnail, optimized) so Bull can retry
@@ -103,7 +128,7 @@ export class UploadService {
     destination: string,
     originalFilename: string,
     optimizedData: any,
-  ): Promise<{ url: string; urlThumbnail: string; urlCompressed?: string; urlOptimized?: string }> {
+  ): Promise<any> {
     const urls: any = {};
 
     // Original upload is best-effort: large files (e.g. uncompressed PNGs) can exceed
@@ -122,47 +147,34 @@ export class UploadService {
       }
     }
 
-    if (optimizedData.thumbnail) {
-      const thumbnailPath = path.join(directory, optimizedData.thumbnail);
-      if (fs.existsSync(thumbnailPath)) {
-        const result = await this.storageService.uploadFile(
-          thumbnailPath,
-          destination,
-          optimizedData.thumbnail,
-        );
-        urls.urlThumbnail = result.objectName;
-      }
-    }
+    const variantMap: Array<[string, string]> = [
+      ['thumbnail',       'urlThumbnail'],
+      ['thumbnailWebp',   'urlThumbnailWebP'],
+      ['preview',         'urlPreview'],
+      ['previewWebp',     'urlPreviewWebP'],
+      ['compressed',      'urlCompressed'],
+      ['compressedWebp',  'urlCompressedWebP'],
+      ['full',            'urlFull'],
+      ['fullWebp',        'urlFullWebP'],
+      ['optimized',       'urlOptimized'],
+    ];
 
-    if (optimizedData.compressed) {
-      const compressedPath = path.join(directory, optimizedData.compressed);
-      if (fs.existsSync(compressedPath)) {
-        const result = await this.storageService.uploadFile(
-          compressedPath,
-          destination,
-          optimizedData.compressed,
-        );
-        urls.urlCompressed = result.objectName;
-      }
-    }
-
-    if (optimizedData.optimized) {
-      const optimizedPath = path.join(directory, optimizedData.optimized);
-      if (fs.existsSync(optimizedPath)) {
-        const result = await this.storageService.uploadFile(
-          optimizedPath,
-          destination,
-          optimizedData.optimized,
-        );
-        urls.urlOptimized = result.objectName;
+    for (const [field, urlKey] of variantMap) {
+      if (optimizedData[field]) {
+        const filePath = path.join(directory, optimizedData[field]);
+        if (fs.existsSync(filePath)) {
+          const result = await this.storageService.uploadFile(filePath, destination, optimizedData[field]);
+          urls[urlKey] = result.objectName;
+        }
       }
     }
 
     // Fallback chain for the primary URL:
     // 1. original (full quality)     — may be skipped for large files
     // 2. urlOptimized (transcoded video)
-    // 3. urlCompressed (800 px image) — always available for images
+    // 3. urlFull / urlCompressed (image) — always available for images
     if (!urls.url && urls.urlOptimized) urls.url = urls.urlOptimized;
+    if (!urls.url && urls.urlFull) urls.url = urls.urlFull;
     if (!urls.url && urls.urlCompressed) urls.url = urls.urlCompressed;
 
     if (!urls.url) {
@@ -180,9 +192,17 @@ export class UploadService {
   ): Promise<void> {
     const filesToDelete = preserveOriginal ? [] : [originalFilename];
 
-    if (optimizedData.thumbnail) filesToDelete.push(optimizedData.thumbnail);
-    if (optimizedData.compressed) filesToDelete.push(optimizedData.compressed);
-    if (optimizedData.optimized) filesToDelete.push(optimizedData.optimized);
+    const variantFields = [
+      'thumbnail', 'thumbnailWebp',
+      'preview', 'previewWebp',
+      'compressed', 'compressedWebp',
+      'full', 'fullWebp',
+      'optimized',
+    ];
+
+    for (const field of variantFields) {
+      if (optimizedData[field]) filesToDelete.push(optimizedData[field]);
+    }
 
     for (const fileName of filesToDelete) {
       const filePath = path.join(directory, fileName);
@@ -215,42 +235,57 @@ export class UploadService {
     throw new BadRequestException(`Unsupported file type: ${fileType}`);
   }
 
-  private async optimizeImage(
-    filePath: string,
-  ): Promise<{ thumbnail: string; compressed: string }> {
+  private async optimizeImage(filePath: string): Promise<{
+    thumbnail: string; thumbnailWebp: string;
+    preview: string; previewWebp: string;
+    compressed: string; compressedWebp: string;
+    full: string; fullWebp: string;
+    blurHash: string;
+  }> {
+    const meta = await sharp(filePath).metadata();
+    if ((meta.width ?? 0) * (meta.height ?? 0) > 100_000_000) {
+      throw new BadRequestException('Image dimensions too large (max 100MP)');
+    }
+
     const directory = path.dirname(filePath);
     const ext = path.extname(filePath).toLowerCase();
     const basename = path.basename(filePath, ext);
 
-    // PNG lossless output is 5-10x larger than JPEG for photographic content.
-    // Convert PNG derivatives to JPEG so they stay under the object-storage
-    // proxy body-size limit. Other formats keep their original extension.
-    const outputExt = ext === '.png' ? '.jpg' : ext;
-    const compressedFilename = `compressed-${basename}${outputExt}`;
-    const thumbnailFilename = `thumbnail-${basename}${outputExt}`;
-    const compressedPath = path.join(directory, compressedFilename);
-    const thumbnailPath = path.join(directory, thumbnailFilename);
-
-    const base = sharp(filePath).rotate();
-    const compressedPipe = base.clone().resize({ width: 800 });
-    const thumbnailPipe = base.clone().resize({ width: 200 });
-
-    if (ext === '.png') {
-      await Promise.all([
-        compressedPipe.jpeg({ quality: 85 }).toFile(compressedPath),
-        thumbnailPipe.jpeg({ quality: 80 }).toFile(thumbnailPath),
-      ]);
-    } else {
-      await Promise.all([
-        compressedPipe.toFile(compressedPath),
-        thumbnailPipe.toFile(thumbnailPath),
-      ]);
-    }
-
-    return {
-      compressed: compressedFilename,
-      thumbnail: thumbnailFilename,
+    // All derivatives output as JPEG + WebP regardless of input format.
+    // Sharp strips EXIF by default (withMetadata() is intentionally not called).
+    // .rotate() bakes EXIF orientation into pixels — privacy safe.
+    // withoutEnlargement: true prevents upscaling smaller source images.
+    // Animated GIF: Sharp extracts only the first frame when converting to JPEG/WebP.
+    // This is intentional — static thumbnails are generated; animations are not preserved.
+    const names = {
+      thumbnail:    `thumbnail-${basename}.jpg`,
+      thumbnailWebp:`thumbnail-${basename}.webp`,
+      preview:      `preview-${basename}.jpg`,
+      previewWebp:  `preview-${basename}.webp`,
+      compressed:   `compressed-${basename}.jpg`,
+      compressedWebp:`compressed-${basename}.webp`,
+      full:         `full-${basename}.jpg`,
+      fullWebp:     `full-${basename}.webp`,
     };
+
+    const p = (name: string) => path.join(directory, name);
+    const base = sharp(filePath).rotate();
+
+    const [, , , , , , , , blurHashBuffer] = await Promise.all([
+      base.clone().resize({ width: 200,  withoutEnlargement: true }).jpeg({ quality: 80, progressive: true }).toFile(p(names.thumbnail)),
+      base.clone().resize({ width: 200,  withoutEnlargement: true }).webp({ quality: 77 }).toFile(p(names.thumbnailWebp)),
+      base.clone().resize({ width: 400,  withoutEnlargement: true }).jpeg({ quality: 82, progressive: true }).toFile(p(names.preview)),
+      base.clone().resize({ width: 400,  withoutEnlargement: true }).webp({ quality: 79 }).toFile(p(names.previewWebp)),
+      base.clone().resize({ width: 800,  withoutEnlargement: true }).jpeg({ quality: 85, progressive: true }).toFile(p(names.compressed)),
+      base.clone().resize({ width: 800,  withoutEnlargement: true }).webp({ quality: 82 }).toFile(p(names.compressedWebp)),
+      base.clone().resize({ width: 1200, withoutEnlargement: true }).jpeg({ quality: 88, progressive: true }).toFile(p(names.full)),
+      base.clone().resize({ width: 1200, withoutEnlargement: true }).webp({ quality: 85 }).toFile(p(names.fullWebp)),
+      // 32x32 raw RGBA used for BlurHash — tiny dimensions are intentional
+      base.clone().resize(32, 32, { fit: 'fill' }).raw().ensureAlpha().toBuffer(),
+    ]);
+
+    const blurHash = encodeBlurHash(new Uint8ClampedArray(blurHashBuffer), 32, 32, 4, 3);
+    return { ...names, blurHash };
   }
 
   private async optimizeVideo(
@@ -289,7 +324,8 @@ export class UploadService {
         this.logger.warn(`Could not delete original video ${filePath}: ${err.message}`),
       );
 
-      await this.generateVideoThumbnail(optimizedPath, directory, thumbnailFilename);
+      const duration = await this.getVideoDuration(optimizedPath);
+      await this.generateVideoThumbnail(optimizedPath, directory, thumbnailFilename, duration);
 
       return { optimized: `${optimizedBasename}.mp4`, thumbnail: thumbnailFilename };
     } catch (err) {
@@ -305,8 +341,60 @@ export class UploadService {
     }
   }
 
-  private async generateVideoThumbnail(filePath: string, outputDir: string, thumbnailFilename: string): Promise<string> {
+  private async getVideoDuration(filePath: string): Promise<number> {
+    try {
+      const { stdout } = await execFileAsync(ffprobePath, [
+        '-v', 'quiet',
+        '-show_entries', 'format=duration',
+        '-of', 'csv=p=0',
+        filePath,
+      ]);
+      const duration = parseFloat(stdout.trim());
+      return isNaN(duration) ? 0 : duration;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async findBestVideoFrame(filePath: string, duration: number): Promise<number> {
+    const safeMax = duration > 0 ? duration - 0.1 : 1;
+    const candidates = [1, 3, 5, duration * 0.10, duration * 0.25]
+      .map((t) => Math.min(t, safeMax))
+      .filter((t) => t > 0);
+
+    // Deduplicate timestamps
+    const unique = [...new Set(candidates.map((t) => Math.round(t * 100) / 100))];
+
+    for (const ts of unique) {
+      const tmpFile = `${filePath}-probe-${ts}.jpg`;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          ffmpeg(filePath)
+            .screenshots({ count: 1, folder: path.dirname(tmpFile), filename: path.basename(tmpFile), timemarks: [String(ts)] })
+            .on('end', () => resolve())
+            .on('error', reject);
+        });
+
+        if (fs.existsSync(tmpFile)) {
+          const stats = await sharp(tmpFile).stats();
+          await unlinkAsync(tmpFile).catch(() => undefined);
+          // stats.channels[0] is the red/luma channel; mean > threshold means not a black frame
+          if (stats.channels[0].mean > BRIGHTNESS_THRESHOLD) {
+            return ts;
+          }
+        }
+      } catch {
+        await unlinkAsync(tmpFile).catch(() => undefined);
+      }
+    }
+
+    // All candidates were dark — fall back to 20% of duration
+    return duration > 0 ? Math.min(duration * 0.20, safeMax) : 1;
+  }
+
+  private async generateVideoThumbnail(filePath: string, outputDir: string, thumbnailFilename: string, duration: number): Promise<string> {
     const thumbnailPath = path.join(outputDir, thumbnailFilename);
+    const bestTs = await this.findBestVideoFrame(filePath, duration);
 
     return new Promise((resolve, reject) => {
       ffmpeg(filePath)
@@ -314,8 +402,8 @@ export class UploadService {
           count: 1,
           folder: outputDir,
           filename: thumbnailFilename,
-          size: '320x240',
-          timemarks: ['00:00:01'],
+          size: '640x360',
+          timemarks: [String(bestTs)],
         })
         .on('end', () => {
           if (fs.existsSync(thumbnailPath)) {
@@ -324,9 +412,7 @@ export class UploadService {
             reject(new Error('Thumbnail not generated'));
           }
         })
-        .on('error', (err) => {
-          reject(err);
-        });
+        .on('error', reject);
     });
   }
 }

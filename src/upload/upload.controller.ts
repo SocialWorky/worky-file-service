@@ -70,11 +70,6 @@ export class UploadController {
             urlMedia: body.urlMedia,
             type: body.type,
             token,
-          }, {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 2000 },
-            removeOnComplete: 100,
-            removeOnFail: 50,
           });
           
           const JOB_TIMEOUT_MS = 30_000;
@@ -95,8 +90,16 @@ export class UploadController {
           const formattedResult = {
             url: result.url,
             urlThumbnail: result.urlThumbnail,
+            urlThumbnailWebP: result.urlThumbnailWebP,
+            urlPreview: result.urlPreview,
+            urlPreviewWebP: result.urlPreviewWebP,
             urlCompressed: result.urlCompressed,
+            urlCompressedWebP: result.urlCompressedWebP,
+            urlFull: result.urlFull,
+            urlFullWebP: result.urlFullWebP,
             urlOptimized: result.urlOptimized,
+            blurHash: result.blurHash,
+            deduplicated: result.deduplicated ?? false,
             name: result.originalname,
             filename: result.filename,
           };
@@ -124,11 +127,6 @@ export class UploadController {
         type: body.type,
         token,
         totalFiles,
-      }, {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 2000 },
-        removeOnComplete: 100,
-        removeOnFail: 50,
       });
     }
 

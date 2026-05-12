@@ -60,6 +60,8 @@ function sanitizeUserId(raw: string | undefined): string | null {
 
 import { UploadModule } from './upload/upload.module';
 import { FileProcessingModule } from './file-processing/file-processing.module';
+import { DedupModule } from './dedup/dedup.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { BullModule } from '@nestjs/bull';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
@@ -133,6 +135,8 @@ import { StorageModule } from './storage/storage.module';
     }),
     UploadModule,
     FileProcessingModule,
+    DedupModule,
+    MetricsModule,
   ],
   controllers: [UploadController, AppController],
   providers: [AppService, UploadService],

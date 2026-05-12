@@ -10,8 +10,16 @@ export interface MediaFileUpload {
   // MinIO relative URLs (from uploadService.processFile)
   url?: string;
   urlThumbnail?: string;
+  urlThumbnailWebP?: string;
+  urlPreview?: string;
+  urlPreviewWebP?: string;
   urlCompressed?: string;
+  urlCompressedWebP?: string;
+  urlFull?: string;
+  urlFullWebP?: string;
   urlOptimized?: string;
+  blurHash?: string;
+  deduplicated?: boolean;
 }
 
 export enum TypePublishing {

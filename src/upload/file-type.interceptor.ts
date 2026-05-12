@@ -14,6 +14,9 @@ interface MagicSignature {
   mimeType: string;
 }
 
+// HEIC/HEIF brand codes found at offset 8–11 after 'ftyp' marker at offset 4–7
+const HEIC_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'mif1', 'msf1', 'avif', 'avis']);
+
 const MAGIC_SIGNATURES: MagicSignature[] = [
   { bytes: [0xff, 0xd8, 0xff], mimeType: 'image/jpeg' },
   { bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], mimeType: 'image/png' },
@@ -34,6 +37,8 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/bmp',
   'image/tiff',
   'image/webp',
+  'image/heic',
+  'image/heif',
   'video/mp4',
   'video/mpeg',
   'video/quicktime',
@@ -64,6 +69,11 @@ function detectMimeFromBytes(buf: Buffer): string | null {
       buf[ftypOffset] === 0x66 && buf[ftypOffset + 1] === 0x74 &&
       buf[ftypOffset + 2] === 0x79 && buf[ftypOffset + 3] === 0x70
     ) {
+      // Read the 4-byte brand code that follows 'ftyp' to distinguish HEIC from MP4
+      if (buf.length >= 12) {
+        const brand = String.fromCharCode(buf[8], buf[9], buf[10], buf[11]);
+        if (HEIC_BRANDS.has(brand)) return 'image/heic';
+      }
       return 'video/mp4';
     }
   }
