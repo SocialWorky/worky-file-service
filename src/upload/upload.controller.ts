@@ -7,21 +7,25 @@ import {
   BadRequestException,
   UseGuards,
   Headers,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileTypeInterceptor } from './file-type.interceptor';
-import { AuthService } from 'src/auth/auth.service';
 import { Queue } from 'bull';
 import { InjectQueue } from '@nestjs/bull';
 import { TypePublishing } from '../file-processing/notification.client';
+
+// JwtAuthGuard (passport-jwt) already verifies the token cryptographically before the
+// handler runs. A second call to validateToken() here was redundant and added attack
+// surface (it read process.env.JWT_SECRET inline and never used the returned user).
+// The raw token is still extracted here only to forward it to downstream services.
 
 @Controller('upload')
 export class UploadController {
   constructor(
     private readonly uploadService: UploadService,
-    private _authService: AuthService,
     @InjectQueue('fileProcessing') private fileProcessingQueue: Queue,
   ) {}
 
@@ -40,12 +44,12 @@ export class UploadController {
       type?: string;
     },
   ) {
-    const token = authHeader.split(' ')[1];
-    const user = this._authService.validateToken(token);
-
-    if (!user) {
-      throw new BadRequestException('Invalid token');
+    // authHeader has already been validated by JwtAuthGuard; we only need the raw value
+    // to forward to downstream services (connect-service, backend).
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Authorization header missing or malformed');
     }
+    const token = authHeader.slice(7);
 
     if (!files || files.length === 0) {
       throw new BadRequestException(
@@ -53,13 +57,11 @@ export class UploadController {
       );
     }
 
-    // If type is 'profileImg', process asynchronously but wait for the result
     if (body.type === TypePublishing.PROFILE_IMG) {
       const results = [];
-      
+
       for (const file of files) {
         try {
-          // Create a job and wait for it to finish
           const job = await this.fileProcessingQueue.add('fileProcessing', {
             file,
             userId: body.userId,
@@ -68,17 +70,28 @@ export class UploadController {
             urlMedia: body.urlMedia,
             type: body.type,
             token,
+          }, {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 2000 },
+            removeOnComplete: 100,
+            removeOnFail: 50,
           });
           
-          // Wait for the job to finish and get the result
-          const result = await job.finished();
+          const JOB_TIMEOUT_MS = 30_000;
+          const result = await Promise.race([
+            job.finished(),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error('File processing timed out after 30s')),
+                JOB_TIMEOUT_MS,
+              ),
+            ),
+          ]);
           
-          // Verify that the result exists
           if (!result) {
             throw new BadRequestException('Could not process the file');
           }
           
-          // The result will contain the processing result with MinIO URLs
           const formattedResult = {
             url: result.url,
             urlThumbnail: result.urlThumbnail,
@@ -100,7 +113,7 @@ export class UploadController {
       };
     }
 
-    // For other types, use asynchronous processing with queue
+    const totalFiles = files.length;
     for (const file of files) {
       await this.fileProcessingQueue.add('fileProcessing', {
         file,
@@ -110,6 +123,12 @@ export class UploadController {
         urlMedia: body.urlMedia,
         type: body.type,
         token,
+        totalFiles,
+      }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: 100,
+        removeOnFail: 50,
       });
     }
 

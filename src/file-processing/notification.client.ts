@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 
 export interface MediaFileUpload {
@@ -33,15 +33,40 @@ export enum MessageType {
   FILE = 'file',
 }
 
+// Safety timeout: if some files fail all retries and never call sendNotification,
+// dispatch whatever we have after this many ms to avoid the UI being stuck forever.
+const BATCH_SAFETY_TIMEOUT_MS = 120_000;
+
+interface BatchEntry {
+  completed: number;
+  total: number;
+  latestPayload: {
+    userId: string; title: string; body: string; data: any;
+    urlMedia: string; type: TypePublishing; token: string;
+  };
+  safetyTimer: ReturnType<typeof setTimeout>;
+}
+
 @Injectable()
 export class NotificationClient {
+  private readonly logger = new Logger(NotificationClient.name);
+
   private BASE_URL = process.env.BASE_URL;
   private NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL;
   private API_BACKEND_URL = process.env.API_BACKEND_URL;
   private API_MESSAGES_SERVICE_URL = process.env.API_MESSAGES_SERVICE_URL;
 
+  // Per-publication completion tracking. Keyed by idReference.
+  private readonly batches = new Map<string, BatchEntry>();
+
   constructor(private http: HttpService) {}
 
+  // saveFiles (DB persist) and socketSend (UI update) are intentionally independent.
+  // A DB failure must NOT block the socket notification.
+  //
+  // Multiple files in one upload share the same idReference. The upload controller stamps
+  // totalFiles on every job so we can count completions and fire ONE socket notification
+  // only when the last file finishes — regardless of per-file processing time.
   async sendNotification(payload: {
     userId: string;
     title: string;
@@ -51,16 +76,59 @@ export class NotificationClient {
     urlMedia: string;
     type: TypePublishing;
     token: string;
+    totalFiles: number;
   }) {
     try {
-      const response = await this.saveFiles(
+      await this.saveFiles(
         payload.data,
         payload.urlMedia,
         payload.idReference,
         payload.type,
         payload.token,
       );
+    } catch (error) {
+      this.logger.error(
+        `saveFiles failed for userId=${payload.userId} type=${payload.type}: ${error.message}`,
+        error.stack,
+      );
+    }
 
+    const { idReference, totalFiles } = payload;
+
+    if (!this.batches.has(idReference)) {
+      const safetyTimer = setTimeout(
+        () => this.dispatchNotification(idReference),
+        BATCH_SAFETY_TIMEOUT_MS,
+      );
+      this.batches.set(idReference, { completed: 0, total: totalFiles ?? 1, latestPayload: payload, safetyTimer });
+    }
+
+    const batch = this.batches.get(idReference)!;
+    batch.completed += 1;
+    batch.latestPayload = payload;
+
+    this.logger.log(
+      `File completed for idReference=${idReference}: ${batch.completed}/${batch.total}`,
+    );
+
+    if (batch.completed >= batch.total) {
+      await this.dispatchNotification(idReference);
+    }
+  }
+
+  private async dispatchNotification(idReference: string): Promise<void> {
+    const batch = this.batches.get(idReference);
+    if (!batch) return;
+
+    clearTimeout(batch.safetyTimer);
+    this.batches.delete(idReference);
+
+    const { latestPayload: payload } = batch;
+    this.logger.log(
+      `Dispatching batched notification for idReference=${idReference} (${batch.completed}/${batch.total} files)`,
+    );
+
+    try {
       await this.http.axiosRef.post(
         `${this.NOTIFICATION_SERVICE_URL}/notifications/socketSend`,
         {
@@ -68,21 +136,20 @@ export class NotificationClient {
           title: payload.title,
           body: payload.body,
           data: payload.data,
-          idReference: payload.idReference,
+          idReference,
           urlMedia: payload.urlMedia,
           type: payload.type,
-          response,
         },
         {
-          headers: {
-            Authorization: `Bearer ${payload.token}`,
-          },
+          headers: { Authorization: `Bearer ${payload.token}` },
+          timeout: 10000,
         },
       );
     } catch (error) {
-      // Re-throw the error to allow the caller to handle it.
-      // Notification errors should be handled by the caller.
-      throw error;
+      this.logger.error(
+        `socketSend failed for userId=${payload.userId} type=${payload.type}: ${error.message}`,
+        error.stack,
+      );
     }
   }
 
@@ -94,53 +161,33 @@ export class NotificationClient {
     token: string,
   ) {
     const file = response;
-    try {
-      let content = '';
-      let typeFile: MessageType;
+    let content = '';
+    let typeFile: MessageType;
 
-      if (type === TypePublishing.MESSAGE) {
-        let urlFile = '';
-        typeFile = MessageType.IMAGE;
-        if (this.isVideoUrl(file.filename)) {
-          typeFile = MessageType.VIDEO;
-          // Use relative paths from MinIO (file.urlThumbnail and file.urlOptimized are already relative)
-          // These come from uploadService.processFile which returns MinIO relative paths
-          const videoSaved = file.urlThumbnail || `messages/${file.thumbnail}`;
-          urlFile = file.urlOptimized || file.url || `messages/${file.optimized || file.filename}`;
-          // For markdown content, use the thumbnail URL (relative path)
-          content = `![Image](${videoSaved})`;
-        } else {
-          // Use relative paths from MinIO (file.url is already relative like "messages/filename.jpg")
-          // Prefer urlCompressed for display, fallback to url, then construct from filename
-          const imagenSaved = file.urlCompressed || file.url || `messages/${file.filename}`;
-          urlFile = file.url || `messages/${file.filename}`;
-          content = `![Image](${imagenSaved})`;
-        }
-
-        await this.saveFileMessage(id, content, typeFile, urlFile, token);
-        return { content, typeFile, urlFile };
+    if (type === TypePublishing.MESSAGE) {
+      let urlFile = '';
+      typeFile = MessageType.IMAGE;
+      if (this.isVideoUrl(file.filename)) {
+        typeFile = MessageType.VIDEO;
+        const videoSaved = file.urlThumbnail || `messages/${file.thumbnail}`;
+        urlFile = file.urlOptimized || file.url || `messages/${file.optimized || file.filename}`;
+        content = `![Image](${videoSaved})`;
       } else {
-        // Use MinIO relative URLs directly instead of constructing URLs with saveLocation
-        // uploadService.processFile returns relative MinIO paths like "comment/filename.jpg"
-        const url = file.url;
-        const urlThumbnail = file.urlThumbnail;
-        const urlCompressed = this.isVideoUrl(file.filename)
-          ? file.urlOptimized || file.url
-          : file.urlCompressed || file.url;
-
-        await this.saveUrlFile(
-          url,
-          urlThumbnail,
-          urlCompressed,
-          id,
-          type,
-          token,
-        );
+        const imagenSaved = file.urlCompressed || file.url || `messages/${file.filename}`;
+        urlFile = file.url || `messages/${file.filename}`;
+        content = `![Image](${imagenSaved})`;
       }
-    } catch (error) {
-      // Re-throw the error to allow the caller to handle it.
-      // Swallowing this error can lead to data inconsistencies.
-      throw error;
+
+      await this.saveFileMessage(id, content, typeFile, urlFile, token);
+      return { content, typeFile, urlFile };
+    } else {
+      const url = file.url;
+      const urlThumbnail = file.urlThumbnail;
+      const urlCompressed = this.isVideoUrl(file.filename)
+        ? file.urlOptimized || file.url
+        : file.urlCompressed || file.url;
+
+      await this.saveUrlFile(url, urlThumbnail, urlCompressed, id, type, token);
     }
   }
 
@@ -173,29 +220,20 @@ export class NotificationClient {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        timeout: 10000,
       },
     );
   }
 
   async saveFileMessage(idMessage, content, type, urlFile, token) {
-    try {
-      const response = await this.http.axiosRef.put<any>(
-        `${this.API_MESSAGES_SERVICE_URL}/messages/${idMessage}`,
-        {
-          content: content,
-          type: type,
-          urlFile: urlFile,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      return response.data;
-    } catch (error: any) {
-      // Re-throw the error for proper error handling
-      throw error;
-    }
+    const response = await this.http.axiosRef.put<any>(
+      `${this.API_MESSAGES_SERVICE_URL}/messages/${idMessage}`,
+      { content, type, urlFile },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 10000,
+      },
+    );
+    return response.data;
   }
 }

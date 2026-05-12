@@ -32,19 +32,13 @@ export class MinioService implements OnModuleInit {
         this.logger.log(`Bucket "${this.bucket}" already exists`);
       }
       
-      // Set bucket policy to allow public read access
       await this.setBucketPublicPolicy();
-      
-      // Set CORS policy to allow cross-origin requests
       await this.setBucketCorsPolicy();
     } catch (error) {
       this.logger.error(`Error checking/creating bucket: ${error.message}`);
     }
   }
 
-  /**
-   * Sets bucket policy to allow public read access
-   */
   private async setBucketPublicPolicy(): Promise<void> {
     try {
       const policy = {
@@ -66,23 +60,11 @@ export class MinioService implements OnModuleInit {
     }
   }
 
-  /**
-   * CORS configuration note:
-   * CORS must be configured at the MinIO server level, not via the client SDK.
-   * Configure CORS using the MinIO Console or the `mc` CLI tool:
-   * mc admin config set ALIAS cors allow_origin="*"
-   */
+  // CORS must be configured at the MinIO server level via the Console or `mc` CLI, not via the SDK.
   private async setBucketCorsPolicy(): Promise<void> {
     this.logger.log('CORS must be configured at the MinIO server level');
   }
 
-  /**
-   * Uploads a file to MinIO
-   * @param filePath Local path of the file
-   * @param destination Destination folder in bucket (e.g., 'posts', 'profiles')
-   * @param fileName Name of the file in MinIO
-   * @returns URL of the uploaded file
-   */
   async uploadFile(filePath: string, destination: string, fileName: string): Promise<string> {
     const objectName = `${destination}/${fileName}`;
     const metaData = {
@@ -92,8 +74,6 @@ export class MinioService implements OnModuleInit {
     try {
       await this.minioClient.fPutObject(this.bucket, objectName, filePath, metaData);
       this.logger.log(`File uploaded: ${objectName}`);
-
-      // Return relative path (frontend will construct full URL using MINIO_BUCKET_URL)
       return objectName;
     } catch (error) {
       this.logger.error(`Error uploading file: ${error.message}`);
@@ -101,13 +81,6 @@ export class MinioService implements OnModuleInit {
     }
   }
 
-  /**
-   * Uploads a file from buffer to MinIO
-   * @param buffer File buffer
-   * @param destination Destination folder in bucket
-   * @param fileName Name of the file in MinIO
-   * @returns URL of the uploaded file
-   */
   async uploadBuffer(buffer: Buffer, destination: string, fileName: string): Promise<string> {
     const objectName = `${destination}/${fileName}`;
     const metaData = {
@@ -117,8 +90,6 @@ export class MinioService implements OnModuleInit {
     try {
       await this.minioClient.putObject(this.bucket, objectName, buffer, buffer.length, metaData);
       this.logger.log(`Buffer uploaded: ${objectName}`);
-
-      // Return relative path (frontend will construct full URL using MINIO_BUCKET_URL)
       return objectName;
     } catch (error) {
       this.logger.error(`Error uploading buffer: ${error.message}`);
@@ -126,10 +97,6 @@ export class MinioService implements OnModuleInit {
     }
   }
 
-  /**
-   * Deletes a file from MinIO
-   * @param objectName Full path of the object in the bucket
-   */
   async deleteFile(objectName: string): Promise<void> {
     try {
       await this.minioClient.removeObject(this.bucket, objectName);
@@ -140,12 +107,6 @@ export class MinioService implements OnModuleInit {
     }
   }
 
-  /**
-   * Gets a presigned URL for downloading a file
-   * @param objectName Full path of the object in the bucket
-   * @param expirySeconds Expiry time in seconds (default: 24 hours)
-   * @returns Presigned URL
-   */
   async getPresignedUrl(objectName: string, expirySeconds: number = 86400): Promise<string> {
     try {
       return await this.minioClient.presignedGetObject(this.bucket, objectName, expirySeconds);
@@ -155,13 +116,6 @@ export class MinioService implements OnModuleInit {
     }
   }
 
-  /**
-   * Uploads multiple files from a directory to MinIO
-   * @param directory Local directory path
-   * @param destination Destination folder in bucket
-   * @param fileNames Array of file names to upload
-   * @returns Object with file names and their URLs
-   */
   async uploadMultipleFiles(
     directory: string,
     destination: string,
@@ -179,9 +133,6 @@ export class MinioService implements OnModuleInit {
     return results;
   }
 
-  /**
-   * Gets content type based on file extension
-   */
   private getContentType(fileName: string): string {
     const ext = path.extname(fileName).toLowerCase();
     const mimeTypes: Record<string, string> = {

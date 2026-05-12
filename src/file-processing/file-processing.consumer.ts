@@ -1,10 +1,13 @@
-import { Processor, Process } from '@nestjs/bull';
+import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
+import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { UploadService } from '../upload/upload.service';
 import { NotificationClient } from './notification.client';
 
 @Processor('fileProcessing')
 export class FileProcessingConsumer {
+  private readonly logger = new Logger(FileProcessingConsumer.name);
+
   constructor(
     private readonly uploadService: UploadService,
     private readonly notificationClient: NotificationClient,
@@ -12,10 +15,9 @@ export class FileProcessingConsumer {
 
   @Process('fileProcessing')
   async processJob(job: Job<any>) {
-    const { file, userId, destination, idReference, urlMedia, type, token } = job.data;
+    const { file, userId, destination, idReference, urlMedia, type, token, totalFiles } = job.data;
 
     try {
-      // Pass all parameters to processFile so files are stored in correct MinIO folder
       const result = await this.uploadService.processFile(
         file,
         userId,
@@ -25,14 +27,11 @@ export class FileProcessingConsumer {
         type,
       );
 
-      // If type is profileImg, return the result directly
       if (type === 'profileImg') {
-        // Use moveToCompleted so the controller can get the result
         await job.moveToCompleted(result, undefined, true);
         return result;
       }
 
-      // For other types, send notification as before
       await this.notificationClient.sendNotification({
         userId,
         title: 'File processed',
@@ -42,9 +41,27 @@ export class FileProcessingConsumer {
         urlMedia,
         type,
         token,
+        totalFiles: totalFiles ?? 1,
       });
     } catch (error) {
-      throw error; // Re-throw the error so the controller can catch it
+      throw error;
     }
+  }
+
+  @OnQueueFailed()
+  onJobFailed(job: Job<any>, error: Error): void {
+    const e = error as any;
+    const errMsg = [
+      e.code ? `[${e.code}]` : '[no-code]',
+      error.message || '(no message)',
+      e.resource ? `resource=${e.resource}` : '',
+      e.amzRequestid ? `requestId=${e.amzRequestid}` : '',
+    ].filter(Boolean).join(' ');
+    this.logger.error(
+      `Job ${job.id} (${job.name}) failed after ${job.attemptsMade} attempt(s). ` +
+      `userId=${job.data?.userId} type=${job.data?.type} destination=${job.data?.destination}. ` +
+      `Error: ${errMsg}`,
+      error.stack,
+    );
   }
 }
