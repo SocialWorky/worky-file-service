@@ -37,6 +37,9 @@ const ALLOWED_DESTINATIONS = new Set([
   // widgets (admin)
   'widgets',
   'widget',
+  // stories (ephemeral content)
+  'stories',
+  'story',
   // config / misc
   'config',
   'post',
