@@ -1,4 +1,4 @@
-import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
+import { Processor, Process, OnQueueFailed, OnQueueActive, OnQueueStalled } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { UploadService } from '../upload/upload.service';
@@ -17,6 +17,29 @@ export class FileProcessingConsumer {
     private readonly notificationClient: NotificationClient,
     private readonly metricsService: MetricsService,
   ) {}
+
+  @OnQueueActive()
+  onJobActive(job: Job<any>): void {
+    this.logger.log(JSON.stringify({
+      event: 'job_started',
+      jobId: job.id,
+      queue: 'fileProcessing',
+      userId: job.data?.userId,
+      fileType: job.data?.type,
+      attemptsMade: job.attemptsMade,
+    }));
+  }
+
+  @OnQueueStalled()
+  onJobStalled(job: Job<any>): void {
+    this.logger.warn(JSON.stringify({
+      event: 'job_stalled',
+      jobId: job.id,
+      queue: 'fileProcessing',
+      userId: job.data?.userId,
+      fileType: job.data?.type,
+    }));
+  }
 
   @Process({ name: 'fileProcessing', concurrency: 3 })
   async processJob(job: Job<any>) {
@@ -40,7 +63,7 @@ export class FileProcessingConsumer {
     const durationMs = Date.now() - startTime;
     this.metricsService.recordSuccess(type ?? 'unknown', durationMs, file?.size ?? 0, result?.deduplicated ?? false);
     this.logger.log(JSON.stringify({
-      event: 'file_processed',
+      event: 'job_completed',
       jobId: job.id,
       userId,
       type,
@@ -76,7 +99,7 @@ export class FileProcessingConsumer {
 
     this.metricsService.recordFailure(job.data?.type ?? 'unknown', durationMs);
     this.logger.error(JSON.stringify({
-      event: 'file_failed',
+      event: 'job_failed',
       jobId: job.id,
       userId: job.data?.userId,
       type: job.data?.type,
