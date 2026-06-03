@@ -2,13 +2,14 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IStorageProvider, UploadResult } from '../interfaces/storage-provider.interface';
+import { IStorageProvider, StorageHealth, UploadResult } from '../interfaces/storage-provider.interface';
 
 // Only load S3 SDK when STORAGE_PROVIDER=s3
 let S3Client: any;
 let PutObjectCommand: any;
 let DeleteObjectCommand: any;
 let GetObjectCommand: any;
+let HeadBucketCommand: any;
 let getSignedUrl: any;
 
 try {
@@ -17,6 +18,7 @@ try {
   PutObjectCommand = awsSdk.PutObjectCommand;
   DeleteObjectCommand = awsSdk.DeleteObjectCommand;
   GetObjectCommand = awsSdk.GetObjectCommand;
+  HeadBucketCommand = awsSdk.HeadBucketCommand;
 } catch {
   // Package not installed — will throw at runtime if S3 provider is selected
 }
@@ -63,6 +65,31 @@ export class S3StorageProvider implements IStorageProvider {
       `S3 provider: bucket "${this.bucket}" must be created manually via AWS Console or CLI. ` +
       'Auto-creation is skipped to avoid IAM permission issues.',
     );
+  }
+
+  async checkHealth(): Promise<StorageHealth> {
+    if (!HeadBucketCommand) {
+      return {
+        healthy: true,
+        bucketExists: true,
+        detail: 'S3 health check unavailable (HeadBucketCommand not loaded) — assuming healthy',
+      };
+    }
+
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      return {
+        healthy: true,
+        bucketExists: true,
+        detail: `Bucket "${this.bucket}" reachable`,
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        bucketExists: false,
+        detail: `S3 unreachable: ${error.message}`,
+      };
+    }
   }
 
   async uploadFile(filePath: string, destination: string, fileName: string): Promise<UploadResult> {

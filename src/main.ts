@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import helmet from 'helmet';
 import * as jwt from 'jsonwebtoken';
 import { AppModule } from './app.module';
+import { StorageService } from './storage/storage.service';
 
 function bullBoardAuthMiddleware(req: any, res: any, next: () => void) {
   try {
@@ -26,6 +27,7 @@ async function bootstrap() {
   // Health endpoints registered as Express middleware before NestJS routes to avoid
   // being swallowed by the catch-all /:type/:filename file route.
   const expressApp = app.getHttpAdapter().getInstance();
+  const storageService = app.get(StorageService);
 
   // Protect Bull Board — queue internals must not be publicly reachable
   expressApp.use('/api/queues', bullBoardAuthMiddleware);
@@ -34,12 +36,30 @@ async function bootstrap() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Liveness must stay independent of MinIO: the process is alive even if storage is down,
+  // so Kubernetes should not restart the pod over a transient MinIO outage.
   expressApp.get('/health/live', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  expressApp.get('/health/ready', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // Readiness reflects MinIO/bucket reachability so Kubernetes pulls the pod out of
+  // rotation while storage is unreachable, instead of serving requests that will fail.
+  expressApp.get('/health/ready', async (req, res) => {
+    try {
+      const storage = await storageService.checkHealth();
+      const status = storage.healthy ? 200 : 503;
+      res.status(status).json({
+        status: storage.healthy ? 'ok' : 'unhealthy',
+        storage,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(503).json({
+        status: 'unhealthy',
+        storage: { healthy: false, detail: error?.message || 'storage check failed' },
+        timestamp: new Date().toISOString(),
+      });
+    }
   });
 
   app.use(helmet({

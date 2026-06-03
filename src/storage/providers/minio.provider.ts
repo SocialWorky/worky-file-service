@@ -2,10 +2,19 @@ import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as Minio from 'minio';
 import * as path from 'path';
-import { IStorageProvider, UploadResult } from '../interfaces/storage-provider.interface';
+import { IStorageProvider, StorageHealth, UploadResult } from '../interfaces/storage-provider.interface';
 
 const UPLOAD_MAX_ATTEMPTS = 3;
 const UPLOAD_BASE_DELAY_MS = 500;
+const HEALTH_CHECK_TIMEOUT_MS = 3000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
 
 async function withRetry<T>(
   logger: Logger,
@@ -40,10 +49,18 @@ export class MinioStorageProvider implements IStorageProvider {
   private readonly client: Minio.Client;
   private readonly bucket: string;
   private readonly publicUrl: string;
+  private bucketReady = false;
 
   constructor(private readonly configService: ConfigService) {
     this.bucket = configService.get<string>('MINIO_BUCKET', 'social-network-files');
     this.publicUrl = configService.get<string>('MINIO_PUBLIC_URL', 'http://localhost:9000');
+
+    if (!this.bucket || !this.bucket.trim()) {
+      throw new Error(
+        'MINIO_BUCKET is not defined. Set a non-empty bucket name in the environment — ' +
+        'the file service cannot store or serve files without a target bucket.',
+      );
+    }
 
     this.client = new Minio.Client({
       endPoint: configService.get<string>('MINIO_ENDPOINT', 'localhost'),
@@ -67,8 +84,42 @@ export class MinioStorageProvider implements IStorageProvider {
       await this.setBucketPublicPolicy();
       // CORS must be configured at the MinIO server level via the Console or `mc` CLI, not via the SDK.
       this.logger.log('CORS must be configured at the MinIO server level');
+      this.bucketReady = true;
     } catch (error) {
-      this.logger.error(`Error checking/creating bucket: ${error.message}`);
+      // Do not crash the pod on a transient MinIO outage — leave the bucket marked
+      // not-ready so the readiness probe reports the service as unavailable until MinIO recovers.
+      this.bucketReady = false;
+      this.logger.error(
+        `MinIO not ready — could not verify/create bucket "${this.bucket}": ${error.message}. ` +
+        'Uploads will fail and /health/ready will report unhealthy until MinIO is reachable.',
+      );
+    }
+  }
+
+  async checkHealth(): Promise<StorageHealth> {
+    try {
+      const bucketExists = await withTimeout(
+        this.client.bucketExists(this.bucket),
+        HEALTH_CHECK_TIMEOUT_MS,
+        `bucketExists(${this.bucket})`,
+      );
+      if (bucketExists) {
+        this.bucketReady = true;
+      }
+      return {
+        healthy: bucketExists,
+        bucketExists,
+        detail: bucketExists
+          ? `Bucket "${this.bucket}" reachable`
+          : `Bucket "${this.bucket}" does not exist`,
+      };
+    } catch (error) {
+      this.bucketReady = false;
+      return {
+        healthy: false,
+        bucketExists: false,
+        detail: `MinIO unreachable: ${error.message}`,
+      };
     }
   }
 

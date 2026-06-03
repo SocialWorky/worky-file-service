@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { IStorageProvider, UploadResult } from './interfaces/storage-provider.interface';
+import { IStorageProvider, StorageHealth, UploadResult } from './interfaces/storage-provider.interface';
 import { MinioStorageProvider } from './providers/minio.provider';
 import { S3StorageProvider } from './providers/s3.provider';
+import { LocalStorageProvider } from './providers/local.provider';
 
 @Injectable()
 export class StorageService implements IStorageProvider, OnModuleInit {
@@ -10,11 +11,14 @@ export class StorageService implements IStorageProvider, OnModuleInit {
   private readonly provider: IStorageProvider;
 
   constructor(private readonly configService: ConfigService) {
-    const providerName = configService.get<string>('STORAGE_PROVIDER', 'minio').toLowerCase();
+    const providerName = this.resolveProviderName(configService);
 
     switch (providerName) {
       case 's3':
         this.provider = new S3StorageProvider(configService);
+        break;
+      case 'local':
+        this.provider = new LocalStorageProvider(configService);
         break;
       case 'minio':
       default:
@@ -23,6 +27,30 @@ export class StorageService implements IStorageProvider, OnModuleInit {
     }
 
     this.logger.log(`Storage provider: ${providerName.toUpperCase()}`);
+  }
+
+  /**
+   * Honor an explicit STORAGE_PROVIDER; otherwise auto-detect from the environment so the
+   * service degrades to filesystem storage when no object store is configured:
+   *   MinIO env present  -> minio
+   *   AWS S3 env present -> s3
+   *   neither            -> local (filesystem, as before MinIO was introduced)
+   */
+  private resolveProviderName(config: ConfigService): string {
+    const explicit = config.get<string>('STORAGE_PROVIDER');
+    if (explicit && explicit.trim()) return explicit.trim().toLowerCase();
+
+    const hasMinio = !!(config.get<string>('MINIO_ENDPOINT') || config.get<string>('MINIO_PUBLIC_URL'));
+    if (hasMinio) return 'minio';
+
+    const hasS3 = !!(config.get<string>('AWS_S3_BUCKET') && config.get<string>('AWS_ACCESS_KEY_ID'));
+    if (hasS3) return 's3';
+
+    this.logger.warn(
+      'No MinIO or AWS S3 environment configured — falling back to local filesystem storage. ' +
+      'Set STORAGE_PROVIDER explicitly to silence this auto-detection.',
+    );
+    return 'local';
   }
 
   async onModuleInit(): Promise<void> {
@@ -56,5 +84,9 @@ export class StorageService implements IStorageProvider, OnModuleInit {
 
   ensureBucket(): Promise<void> {
     return this.provider.ensureBucket();
+  }
+
+  checkHealth(): Promise<StorageHealth> {
+    return this.provider.checkHealth();
   }
 }

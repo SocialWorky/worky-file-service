@@ -70,14 +70,12 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { ExpressAdapter } from '@bull-board/express';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { HealthModule } from './health/health.module';
-import { MinioModule } from './minio/minio.module';
 import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
     HealthModule,
     ConfigModule.forRoot({ isGlobal: true }),
-    MinioModule,
     StorageModule,
     AuthModule,
     BullModule.forRoot({
