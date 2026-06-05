@@ -37,4 +37,28 @@ export class DedupService {
       DEDUP_TTL_SECONDS,
     );
   }
+
+  // Invalidate cached processing results so the next upload re-processes the file.
+  // Pass a destination (e.g. "emojis") to scope the purge; omit it to clear all.
+  // Uses SCAN (non-blocking) instead of KEYS so it is safe on large datasets.
+  async clear(destination?: string): Promise<number> {
+    const pattern = destination ? `dedup:*:${destination}` : 'dedup:*';
+    let cursor = '0';
+    let cleared = 0;
+    do {
+      const [next, keys] = await this.redis.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        200,
+      );
+      cursor = next;
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        cleared += keys.length;
+      }
+    } while (cursor !== '0');
+    return cleared;
+  }
 }

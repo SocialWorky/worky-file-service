@@ -1,16 +1,21 @@
 import {
   Controller,
   Post,
+  Delete,
+  Query,
+  Req,
   UploadedFiles,
   UseInterceptors,
   Body,
   BadRequestException,
+  ForbiddenException,
   UseGuards,
   Headers,
   UnauthorizedException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
+import { DedupService } from '../dedup/dedup.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileTypeInterceptor } from './file-type.interceptor';
 import { Queue } from 'bull';
@@ -26,8 +31,25 @@ import { TypePublishing } from '../file-processing/notification.client';
 export class UploadController {
   constructor(
     private readonly uploadService: UploadService,
+    private readonly dedupService: DedupService,
     @InjectQueue('fileProcessing') private fileProcessingQueue: Queue,
   ) {}
+
+  // Invalidate the dedup cache so re-uploading identical files re-processes them
+  // (e.g. after changing the image pipeline). Optional ?destination=emojis scopes
+  // the purge; omit it to clear everything. Admin-only — the role travels in the JWT.
+  @UseGuards(JwtAuthGuard)
+  @Delete('dedup-cache')
+  async clearDedupCache(
+    @Req() req: { user?: { role?: string } },
+    @Query('destination') destination?: string,
+  ): Promise<{ cleared: number; destination: string }> {
+    if (req.user?.role !== 'admin') {
+      throw new ForbiddenException('Only admins can clear the cache');
+    }
+    const cleared = await this.dedupService.clear(destination?.trim() || undefined);
+    return { cleared, destination: destination?.trim() || 'all' };
+  }
 
   @UseGuards(JwtAuthGuard)
   @Post()

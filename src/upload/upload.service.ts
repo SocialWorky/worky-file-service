@@ -251,25 +251,22 @@ export class UploadService {
     const ext = path.extname(filePath).toLowerCase();
     const basename = path.basename(filePath, ext);
 
-    // Images WITHOUT an alpha channel output as JPEG (+ a WebP companion).
-    // Images WITH alpha (transparent emojis/stickers/logos) output as WebP, which
-    // is smaller than PNG and keeps the alpha channel — JPEG has no alpha and Sharp
-    // would composite transparency over a black background. For alpha images the
-    // primary and WebP URLs point to the same .webp file (generated once).
+    // All raster derivatives are WebP: it handles both opaque and transparent images,
+    // compresses better than JPEG/PNG, and preserves the alpha channel — transparent
+    // emojis/stickers/logos no longer get a black background (JPEG has no alpha).
+    // The legacy `*Webp` URL fields point to the same files for backward compatibility.
     // Sharp strips EXIF by default (withMetadata() is intentionally not called).
     // .rotate() bakes EXIF orientation into pixels — privacy safe.
     // withoutEnlargement: true prevents upscaling smaller source images.
     // Animated GIF: Sharp extracts only the first frame — animations are not preserved.
-    const hasAlpha = meta.hasAlpha === true;
-    const rasterExt = hasAlpha ? 'webp' : 'jpg';
     const names = {
-      thumbnail:    `thumbnail-${basename}.${rasterExt}`,
+      thumbnail:    `thumbnail-${basename}.webp`,
       thumbnailWebp:`thumbnail-${basename}.webp`,
-      preview:      `preview-${basename}.${rasterExt}`,
+      preview:      `preview-${basename}.webp`,
       previewWebp:  `preview-${basename}.webp`,
-      compressed:   `compressed-${basename}.${rasterExt}`,
+      compressed:   `compressed-${basename}.webp`,
       compressedWebp:`compressed-${basename}.webp`,
-      full:         `full-${basename}.${rasterExt}`,
+      full:         `full-${basename}.webp`,
       fullWebp:     `full-${basename}.webp`,
     };
 
@@ -277,23 +274,18 @@ export class UploadService {
     const base = sharp(filePath).rotate();
 
     const sizes = [
-      { width: 200,  raster: names.thumbnail,  webp: names.thumbnailWebp,  jpegQuality: 80, webpQuality: 77 },
-      { width: 400,  raster: names.preview,    webp: names.previewWebp,    jpegQuality: 82, webpQuality: 79 },
-      { width: 800,  raster: names.compressed, webp: names.compressedWebp, jpegQuality: 85, webpQuality: 82 },
-      { width: 1200, raster: names.full,       webp: names.fullWebp,       jpegQuality: 88, webpQuality: 85 },
+      { width: 200,  file: names.thumbnail,  quality: 80 },
+      { width: 400,  file: names.preview,    quality: 82 },
+      { width: 800,  file: names.compressed, quality: 85 },
+      { width: 1200, file: names.full,       quality: 88 },
     ];
 
-    const variantTasks = sizes.flatMap((s) => {
-      const resized = () => base.clone().resize({ width: s.width, withoutEnlargement: true });
-      if (hasAlpha) {
-        // raster and webp names resolve to the same .webp file — generate it once.
-        return [resized().webp({ quality: s.webpQuality, alphaQuality: 100 }).toFile(p(s.raster))];
-      }
-      return [
-        resized().jpeg({ quality: s.jpegQuality, progressive: true }).toFile(p(s.raster)),
-        resized().webp({ quality: s.webpQuality }).toFile(p(s.webp)),
-      ];
-    });
+    const variantTasks = sizes.map((s) =>
+      base.clone()
+        .resize({ width: s.width, withoutEnlargement: true })
+        .webp({ quality: s.quality, alphaQuality: 100 })
+        .toFile(p(s.file)),
+    );
 
     // 32x32 raw RGBA used for BlurHash — tiny dimensions are intentional
     const blurHashTask = base.clone().resize(32, 32, { fit: 'fill' }).raw().ensureAlpha().toBuffer();
