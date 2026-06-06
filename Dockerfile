@@ -33,7 +33,13 @@ RUN npm run build
 
 # Final stage for production
 FROM base as prod
+# Use ARG to make port configurable at build time
+ARG APP_PORT=3005
+# Expose the port (will use ARG value)
+EXPOSE ${APP_PORT}
 WORKDIR /app
+# Set APP_PORT as environment variable (can be overridden at runtime)
+ENV APP_PORT=${APP_PORT}
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 

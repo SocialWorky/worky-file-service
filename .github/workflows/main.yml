@@ -1,17 +1,25 @@
-name: Update Container on Portainer
+name: Build and Update K8s Manifest (GitOps)
 
 on:
   push:
     branches:
       - development
+    paths-ignore:
+      - 'k8s/**'
+
+permissions:
+  contents: write
 
 jobs:
-  update-container:
+  build-and-update:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }} # Usamos tu Token Maestro
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
@@ -24,19 +32,30 @@ jobs:
 
       - name: Build and push Docker image
         run: |
-          echo "Iniciando la construcción y el empuje de la imagen Docker multiplataforma..."
+          echo "Iniciando build multiplataforma..."
+          # Usamos el SHA corto de Git como tag
           docker buildx create --use
           docker buildx build --platform linux/amd64,linux/arm64 -t socialworky/worky-file-service-dev:${{ github.sha }} --push .
-          echo "Construcción y empuje de la imagen Docker multiplataforma completados."
+          echo "Imagen subida: socialworky/worky-file-service-dev:${{ github.sha }}"
 
-      - name: Deploy stack to Portainer
-        uses: carlrygart/portainer-stack-deploy@v1
-        with:
-          portainer-host: https://portainer-dev.worky.cl
-          username: ${{ secrets.PORTAINER_USERNAME }}
-          password: ${{ secrets.PORTAINER_PASSWORD }}
-          stack-name: 'worky-file-service'
-          stack-definition: 'docker-compose-worky.dev.yml'
-          image: socialworky/worky-file-service-dev:${{ github.sha }}
+      # --- AQUÍ EMPIEZA LA PARTE DE GITOPS ---
+      - name: Update Kubernetes resources
         env:
-          GIT_SHA: ${{ github.sha }}
+          IMAGE_TAG: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          cd k8s
+          
+          # Actualizamos el tag en el archivo deployment.yaml
+          # Nota: Asegúrate de que la imagen base coincida con la de tu deployment
+          sed -i "s|image: socialworky/worky-file-service-dev:.*|image: socialworky/worky-file-service-dev:$IMAGE_TAG|g" deployment.yaml
+          
+          # Configuración de Git
+          git config --global user.name 'GitHub Actions'
+          git config --global user.email 'actions@github.com'
+          
+          # Commit
+          git commit -am "update image tag to $IMAGE_TAG"
+          
+          # Push usando el Token explícitamente (para evitar error 403)
+          git push "https://x-access-token:$GITHUB_TOKEN@github.com/${{ github.repository }}.git" HEAD:development

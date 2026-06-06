@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: files-pvc
+  namespace: social-network-dev
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Replace=false,SkipHealthCheck=true
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-service
+  namespace: social-network-dev
+spec:
+  replicas: 1
+  # Recreate strategy required for ReadWriteOnce volumes
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: file-service
+  template:
+    metadata:
+      labels:
+        app: file-service
+    spec:
+      containers:
+      - name: file-service
+        image: socialworky/worky-file-service-dev:bde1c6e9745e45a27f3ef65deca977432cab06ea
+        ports:
+        # Port comes from APP_PORT environment variable (must be in file-service-env-vars secret)
+        # IMPORTANT: This value MUST match APP_PORT in the secret
+        # Use generate-deployment.sh to automatically generate with correct port
+        # Default: 3005 if APP_PORT is not set (for development)
+        - name: http
+          containerPort: 3005
+          protocol: TCP
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+
+        # APP_PORT is loaded from secret file-service-env-vars
+        # IMPORTANT: The containerPort value above MUST match APP_PORT in the secret
+        # Production may use different port than development
+        # If APP_PORT is not set in secret, it defaults to 3005
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 3005
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3005
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        envFrom:
+        - secretRef:
+            name: file-service-env-vars
+
+        volumeMounts:
+        - name: file-storage
+          mountPath: /app/uploads
+
+      volumes:
+      - name: file-storage
+        persistentVolumeClaim:
+          claimName: files-pvc

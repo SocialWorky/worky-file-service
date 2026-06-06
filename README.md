@@ -1,84 +1,58 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
+# worky-file-service
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+> Centralized media upload and processing service. Every image and video in the platform flows through here — validated by magic bytes, queued via Bull/Redis, optimized with Sharp/FFmpeg, and stored in MinIO or S3.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Stack
 
-## Description
+| | |
+|---|---|
+| Runtime | Node.js 22 |
+| Framework | NestJS 10 |
+| Queue | Bull + Redis (3 jobs/s, 3 retries, exponential backoff) |
+| Images | Sharp — 800px compressed + 200px thumbnail, EXIF auto-rotation |
+| Videos | FFmpeg — 720p H.264 (CRF 23) + JPEG thumbnail at 1s |
+| Storage | MinIO (default) / AWS S3 (opt-in) |
+| Port | 3005 |
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Installation
+## Quick Start
 
 ```bash
-# instalar libvips, es para trabajar con la optimización de las imagenes y videos
-$ brew install libvips
-# instalar ffmpeg para procesar los videos 
-$ brew install ffmpeg
-````
-
-```bash
-$ node version 22.1.0
+npm install
+npm run start:dev
 ```
 
-```bash
-$ npm install
+Requires Redis and MinIO (or S3) running. See [docs/environment-variables.md](./docs/environment-variables.md).
+
+## Upload Endpoint
+
+```
+POST /upload
+Authorization: Bearer <JWT>
+Content-Type: multipart/form-data
+Limits: 10 files · 100 MB each
 ```
 
-## Running the app
+| Field | Required | Description |
+|---|---|---|
+| `files` | Yes | One or more files |
+| `userId` | Yes | Uploading user ID |
+| `destination` | Yes | Storage subdirectory (e.g. `posts`, `profileImg`) |
+| `type` | No | Upload context — see types below |
+| `idReference` | No | Entity UUID the file attaches to |
 
-```bash
-# development
-$ npm run start
+**Type values:** `profileImg` · `post` · `comment` · `postProfile` · `image-view` · `message` · `emoji` · `all`
 
-# watch mode
-$ npm run start:dev
+> `profileImg` is processed **synchronously** (waits up to 30s). All other types return `201` immediately and process in the background.
 
-# production mode
-$ npm run start:prod
-```
+## Queue Monitor
 
-## Test
+Bull Board UI: `http://localhost:3005/api/queues` (JWT-protected)
 
-```bash
-# unit tests
-$ npm run test
+## Health
 
-# e2e tests
-$ npm run test:e2e
+`GET /health` · `GET /health/live` · `GET /health/ready`
 
-# test coverage
-$ npm run test:cov
-```
+## Docs
 
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](LICENSE).
+- [Processing Pipeline](./docs/processing-pipeline.md) — image/video pipeline, queue config, storage providers, adding new providers
+- [Environment Variables](./docs/environment-variables.md) — all env vars with defaults
