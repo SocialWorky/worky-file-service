@@ -64,6 +64,7 @@ export class UploadController {
       idReference?: string;
       urlMedia?: string;
       type?: string;
+      totalFiles?: string;
     },
   ) {
     // authHeader has already been validated by JwtAuthGuard; we only need the raw value
@@ -138,7 +139,13 @@ export class UploadController {
       };
     }
 
-    const totalFiles = files.length;
+    // When the client splits a multi-file upload into one request per file (to stay under the
+    // edge body-size limit), it sends the real total so the completion notification still
+    // batches across requests. Fall back to this request's file count otherwise.
+    const totalFiles =
+      body.totalFiles && Number(body.totalFiles) > 0
+        ? Number(body.totalFiles)
+        : files.length;
     for (const file of files) {
       await this.fileProcessingQueue.add('fileProcessing', {
         file,
