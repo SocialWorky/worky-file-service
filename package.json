@@ -1,6 +1,6 @@
 {
   "name": "worky-file-service",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "File upload and processing service with image/video optimization",
   "author": "",
   "private": true,
