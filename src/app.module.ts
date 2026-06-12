@@ -71,11 +71,13 @@ import { ExpressAdapter } from '@bull-board/express';
 import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { HealthModule } from './health/health.module';
 import { StorageModule } from './storage/storage.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     HealthModule,
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     StorageModule,
     AuthModule,
     BullModule.forRoot({
