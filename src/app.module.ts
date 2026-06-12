@@ -72,6 +72,7 @@ import { BullAdapter } from '@bull-board/api/bullAdapter';
 import { HealthModule } from './health/health.module';
 import { StorageModule } from './storage/storage.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CleanupService } from './cleanup/cleanup.service';
 
 @Module({
   imports: [
@@ -142,6 +143,6 @@ import { ScheduleModule } from '@nestjs/schedule';
     MetricsModule,
   ],
   controllers: [UploadController, AppController],
-  providers: [AppService, UploadService],
+  providers: [AppService, UploadService, CleanupService],
 })
 export class AppModule {}

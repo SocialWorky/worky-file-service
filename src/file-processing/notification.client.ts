@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import * as jwt from 'jsonwebtoken';
 
 export interface MediaFileUpload {
   filename: string;
@@ -50,7 +51,7 @@ interface BatchEntry {
   total: number;
   latestPayload: {
     userId: string; title: string; body: string; data: any;
-    urlMedia: string; type: TypePublishing; token: string;
+    urlMedia: string; type: TypePublishing;
   };
   safetyTimer: ReturnType<typeof setTimeout>;
 }
@@ -69,6 +70,16 @@ export class NotificationClient {
 
   constructor(private http: HttpService) {}
 
+  // Mint a short-lived token from the user's id instead of persisting the user's
+  // access token in Redis job.data. Downstream services map userId = payload.id and
+  // enforce sender ownership, so the file-service must act as the uploading user.
+  private mintUserToken(userId: string): string {
+    return jwt.sign({ id: userId, role: 'user' }, process.env.JWT_SECRET, {
+      expiresIn: '5m',
+      algorithm: 'HS256',
+    });
+  }
+
   // saveFiles (DB persist) and socketSend (UI update) are intentionally independent.
   // A DB failure must NOT block the socket notification.
   //
@@ -83,7 +94,6 @@ export class NotificationClient {
     idReference: string;
     urlMedia: string;
     type: TypePublishing;
-    token: string;
     totalFiles: number;
   }) {
     try {
@@ -92,7 +102,7 @@ export class NotificationClient {
         payload.urlMedia,
         payload.idReference,
         payload.type,
-        payload.token,
+        this.mintUserToken(payload.userId),
       );
     } catch (error) {
       this.logger.error(
@@ -149,7 +159,9 @@ export class NotificationClient {
           type: payload.type,
         },
         {
-          headers: { Authorization: `Bearer ${payload.token}` },
+          headers: {
+            Authorization: `Bearer ${this.mintUserToken(payload.userId)}`,
+          },
           timeout: 10000,
         },
       );
@@ -157,6 +169,42 @@ export class NotificationClient {
       this.logger.error(
         `socketSend failed for userId=${payload.userId} type=${payload.type}: ${error.message}`,
         error.stack,
+      );
+    }
+  }
+
+  // Notify the user that processing failed permanently so the UI stops waiting.
+  async notifyProcessingFailed(
+    userId: string,
+    idReference: string,
+    type: TypePublishing,
+  ): Promise<void> {
+    const existing = this.batches.get(idReference);
+    if (existing) {
+      clearTimeout(existing.safetyTimer);
+      this.batches.delete(idReference);
+    }
+    try {
+      await this.http.axiosRef.post(
+        `${this.NOTIFICATION_SERVICE_URL}/notifications/socketSend`,
+        {
+          userId,
+          title: 'File processing failed',
+          body: 'Your file could not be processed.',
+          data: { error: true },
+          idReference,
+          type,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.mintUserToken(userId)}`,
+          },
+          timeout: 10000,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `notifyProcessingFailed failed for userId=${userId}: ${error.message}`,
       );
     }
   }

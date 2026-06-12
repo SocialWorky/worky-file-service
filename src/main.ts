@@ -13,7 +13,13 @@ function bullBoardAuthMiddleware(req: any, res: any, next: () => void) {
       return;
     }
     const token = authHeader.slice(7);
-    jwt.verify(token, process.env.JWT_SECRET as string);
+    const payload = jwt.verify(token, process.env.JWT_SECRET as string) as {
+      role?: string;
+    };
+    if (payload.role !== 'admin') {
+      res.status(403).json({ message: 'Forbidden' });
+      return;
+    }
     next();
   } catch {
     res.status(401).json({ message: 'Unauthorized' });
