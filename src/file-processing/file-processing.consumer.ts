@@ -1,6 +1,7 @@
 import { Processor, Process, OnQueueFailed, OnQueueActive, OnQueueStalled } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
+import { promises as fs } from 'fs';
 import { UploadService } from '../upload/upload.service';
 import { NotificationClient } from './notification.client';
 import { MetricsService } from '../metrics/metrics.service';
@@ -43,22 +44,18 @@ export class FileProcessingConsumer {
 
   @Process({ name: 'fileProcessing', concurrency: 3 })
   async processJob(job: Job<any>) {
-    const { file, userId, destination, idReference, urlMedia, type, token, totalFiles } = job.data;
+    const { file, userId, destination, idReference, urlMedia, type, totalFiles } = job.data;
     const startTime = Date.now();
     const isVideo = file?.mimetype?.startsWith('video/');
     const timeoutMs = isVideo ? VIDEO_JOB_TIMEOUT_MS : IMAGE_JOB_TIMEOUT_MS;
 
-    let result: any;
-    try {
-      result = await Promise.race([
-        this.uploadService.processFile(file, userId, destination, idReference, urlMedia, type),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('JOB_TIMEOUT')), timeoutMs),
-        ),
-      ]);
-    } catch (error) {
-      throw error;
-    }
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+    const result = await Promise.race([
+      this.uploadService.processFile(file, userId, destination, idReference, urlMedia, type),
+      new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('JOB_TIMEOUT')), timeoutMs);
+      }),
+    ]).finally(() => clearTimeout(timeoutHandle));
 
     const durationMs = Date.now() - startTime;
     this.metricsService.recordSuccess(type ?? 'unknown', durationMs, file?.size ?? 0, result?.deduplicated ?? false);
@@ -87,13 +84,12 @@ export class FileProcessingConsumer {
       idReference,
       urlMedia,
       type,
-      token,
       totalFiles: totalFiles ?? 1,
     });
   }
 
   @OnQueueFailed()
-  onJobFailed(job: Job<any>, error: Error): void {
+  async onJobFailed(job: Job<any>, error: Error): Promise<void> {
     const durationMs = job.processedOn ? Date.now() - job.processedOn : 0;
     const e = error as any;
 
@@ -109,5 +105,23 @@ export class FileProcessingConsumer {
       attempt: job.attemptsMade,
       durationMs,
     }));
+
+    const maxAttempts = job.opts?.attempts ?? 1;
+    if (job.attemptsMade < maxAttempts) {
+      return;
+    }
+
+    const filePath = job.data?.file?.path;
+    if (filePath) {
+      await fs.unlink(filePath).catch(() => undefined);
+    }
+
+    if (job.data?.userId && job.data?.idReference) {
+      await this.notificationClient.notifyProcessingFailed(
+        job.data.userId,
+        job.data.idReference,
+        job.data.type,
+      );
+    }
   }
 }

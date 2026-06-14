@@ -1,6 +1,6 @@
 {
   "name": "worky-file-service",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "description": "File upload and processing service with image/video optimization",
   "author": "",
   "private": true,
@@ -33,6 +33,7 @@
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/passport": "^10.0.3",
     "@nestjs/platform-express": "^10.3.9",
+    "@nestjs/schedule": "^6.1.3",
     "@nestjs/terminus": "^11.0.0",
     "axios": "^1.13.2",
     "blurhash": "^2.0.5",

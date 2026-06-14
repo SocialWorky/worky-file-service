@@ -10,7 +10,6 @@ import {
   BadRequestException,
   ForbiddenException,
   UseGuards,
-  Headers,
   UnauthorizedException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
@@ -56,10 +55,9 @@ export class UploadController {
   @UseInterceptors(FilesInterceptor('files', 10), FileTypeInterceptor)
   async uploadFiles(
     @UploadedFiles() files: Express.Multer.File[],
-    @Headers('authorization') authHeader: string,
+    @Req() req: { user?: { id?: string } },
     @Body()
     body: {
-      userId: string;
       destination: string;
       idReference?: string;
       urlMedia?: string;
@@ -67,12 +65,12 @@ export class UploadController {
       totalFiles?: string;
     },
   ) {
-    // authHeader has already been validated by JwtAuthGuard; we only need the raw value
-    // to forward to downstream services (connect-service, backend).
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Authorization header missing or malformed');
+    // Identity comes from the validated JWT, never from the request body — the body's
+    // userId could be spoofed to upload files attributed to another user.
+    const userId = req.user?.id;
+    if (!userId) {
+      throw new UnauthorizedException('Authenticated user not found');
     }
-    const token = authHeader.slice(7);
 
     if (!files || files.length === 0) {
       throw new BadRequestException(
@@ -87,12 +85,11 @@ export class UploadController {
         try {
           const job = await this.fileProcessingQueue.add('fileProcessing', {
             file,
-            userId: body.userId,
+            userId,
             destination: body.destination,
             idReference: body.idReference,
             urlMedia: body.urlMedia,
             type: body.type,
-            token,
           });
           
           const JOB_TIMEOUT_MS = 30_000;
@@ -149,12 +146,11 @@ export class UploadController {
     for (const file of files) {
       await this.fileProcessingQueue.add('fileProcessing', {
         file,
-        userId: body.userId,
+        userId,
         destination: body.destination,
         idReference: body.idReference,
         urlMedia: body.urlMedia,
         type: body.type,
-        token,
         totalFiles,
       });
     }
