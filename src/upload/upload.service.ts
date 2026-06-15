@@ -411,7 +411,9 @@ export class UploadService {
           count: 1,
           folder: outputDir,
           filename: thumbnailFilename,
-          size: '640x360',
+          // Width-capped, aspect-preserving ('?' computes the height). A fixed '640x360'
+          // stretched portrait frames into a distorted landscape poster.
+          size: '640x?',
           timemarks: [String(bestTs)],
         })
         .on('end', () => {
